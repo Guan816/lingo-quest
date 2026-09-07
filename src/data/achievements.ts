@@ -1,0 +1,103 @@
+import type { Achievement } from '../types';
+
+/** 成就徽章：全部基于本地统计判定，不需要联网 */
+export const ACHIEVEMENTS: Achievement[] = [
+  {
+    id: 'a-first-word',
+    name: '破冰时刻',
+    desc: '说出第一句英语',
+    emoji: '🐣',
+    test: (s) => s.sentencesSpoken >= 1,
+  },
+  {
+    id: 'a-combo-10',
+    name: '连击高手',
+    desc: '达成 10 连击',
+    emoji: '🔥',
+    test: (s) => s.comboBest >= 10,
+  },
+  {
+    id: 'a-perfect-1',
+    name: '字正腔圆',
+    desc: '第一次拿到 90 分以上',
+    emoji: '🎯',
+    test: (s) => s.perfectScores >= 1,
+  },
+  {
+    id: 'a-perfect-20',
+    name: '发音机器',
+    desc: '累计 20 次 90 分以上',
+    emoji: '💎',
+    test: (s) => s.perfectScores >= 20,
+  },
+  {
+    id: 'a-speak-50',
+    name: '话匣子',
+    desc: '累计开口 50 句',
+    emoji: '🗣️',
+    test: (s) => s.sentencesSpoken >= 50,
+  },
+  {
+    id: 'a-speak-200',
+    name: '英语演说家',
+    desc: '累计开口 200 句',
+    emoji: '🎤',
+    test: (s) => s.sentencesSpoken >= 200,
+  },
+  {
+    id: 'a-streak-3',
+    name: '三日之约',
+    desc: '连续练习 3 天',
+    emoji: '📅',
+    test: (s) => s.practiceDays.length >= 3,
+  },
+  {
+    id: 'a-streak-7',
+    name: '一周不断',
+    desc: '连续练习 7 天',
+    emoji: '🗓️',
+    test: (s) => s.practiceDays.length >= 7,
+  },
+  {
+    id: 'a-xp-500',
+    name: '小有所成',
+    desc: '累计获得 500 经验',
+    emoji: '⭐',
+    test: (s) => s.totalXp >= 500,
+  },
+  {
+    id: 'a-xp-2000',
+    name: '语言冒险家',
+    desc: '累计获得 2000 经验',
+    emoji: '🏆',
+    test: (s) => s.totalXp >= 2000,
+  },
+  {
+    id: 'a-boss-1',
+    name: '初战告捷',
+    desc: '击败第一个 BOSS',
+    emoji: '⚔️',
+    test: (s) => s.bossCleared >= 1,
+  },
+  {
+    id: 'a-boss-5',
+    name: 'BOSS 猎手',
+    desc: '击败 5 个 BOSS',
+    emoji: '👑',
+    test: (s) => s.bossCleared >= 5,
+  },
+  {
+    id: 'a-vocab-40',
+    name: '词汇收藏家',
+    desc: '掌握 40 个单词',
+    emoji: '📚',
+    test: (s) => s.wordsLearned.length >= 40,
+  },
+  {
+    id: 'a-minute-30',
+    name: '沉浸式',
+    desc: '累计开口 30 分钟',
+    emoji: '⏱️',
+    test: (s) => s.minutesSpoken >= 30,
+  },
+];

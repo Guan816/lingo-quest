@@ -1,0 +1,39 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# build output
+dist/
+dist_ssr/
+.vite/
+
+# native platforms (generated on demand by `npx cap add android|ios`)
+android/
+ios/
+
+# secrets / local config
+.env
+.env.local
+.env.*.local
+*.keystore
+*.jks
+keystore.properties
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# editors & os
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# tsc -b composite 临时产物
+dist-node-tmp/
