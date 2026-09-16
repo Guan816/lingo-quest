@@ -20,5 +20,10 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
+    proxy: {
+      // 开发时把前端 /api 请求转发到本地后端（8787），
+      // 手机连同一 WiFi 访问 vite 端口时也能自动转发，无需额外配置。
+      '/api': 'http://localhost:8787',
+    },
   },
 });

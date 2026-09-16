@@ -37,3 +37,8 @@ Thumbs.db
 
 # tsc -b composite 临时产物
 dist-node-tmp/
+*.tsbuildinfo
+
+# 本地数据与密钥
+data/
+.env

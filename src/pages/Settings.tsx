@@ -234,9 +234,9 @@ export default function Settings() {
       <section className="pb-4">
         <SectionTitle>关于</SectionTitle>
         <div className="card space-y-2 p-4 text-xs leading-relaxed text-ink-soft">
-          <p className="text-sm font-black text-ink">LingoQuest · 玩着学口语</p>
+          <p className="text-sm font-black text-ink">漫记 · 玩着学口语</p>
           <p>React + TypeScript + Vite + Capacitor，一套代码同时跑网页、Android 与 iOS。</p>
-          <p>所有练习数据存在本地，卸载 App 会随之清除。</p>
+          <p>练习进度默认存在本机；登录账号后自动云同步，并在排行榜与其他玩家比拼。</p>
           <div className="flex gap-2 pt-1">
             <Button
               size="sm"

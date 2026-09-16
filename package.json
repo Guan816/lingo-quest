@@ -1,15 +1,27 @@
 {
-  "name": "lingo-quest",
+  "name": "maneji",
   "private": false,
-  "version": "1.0.0",
-  "description": "LingoQuest - 玩着学的 AI 口语陪练。Game-like AI speaking coach that runs on Web, Android and iOS.",
+  "version": "1.1.0",
+  "description": "漫记 · 玩着学的 AI 口语陪练。Game-like AI speaking coach with cloud sync & leaderboard. Runs on Web, Android and iOS.",
   "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b --noEmit false --emitDeclarationOnly false",
+    "typecheck": "tsc -b",
+
+    "dev:all": "concurrently -k -n web,api -c blue,green \"vite\" \"npm --prefix server run dev\"",
+    "server": "npm --prefix server run dev",
+    "server:dev": "npm --prefix server run dev",
+    "server:build": "npm --prefix server run build",
+    "server:start": "npm --prefix server run start",
+    "db:migrate": "npm --prefix server run migrate",
+
+    "stack:up": "docker compose up -d",
+    "stack:down": "docker compose down",
+    "stack:logs": "docker compose logs -f api",
+
     "cap:sync": "npm run build && cap sync",
     "cap:android": "npm run build && cap sync android && cap open android",
     "android:assemble": "cd android && ./gradlew assembleDebug"
@@ -36,6 +48,7 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",
     "autoprefixer": "^10.4.20",
+    "concurrently": "^9.0.1",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14",
     "typescript": "^5.6.3",

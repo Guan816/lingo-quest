@@ -15,18 +15,37 @@ import Shadowing from './pages/games/Shadowing';
 import FreeTalk from './pages/games/FreeTalk';
 import Stats from './pages/Stats';
 import Settings from './pages/Settings';
+import Login from './pages/Login';
+import Leaderboard from './pages/Leaderboard';
+import WechatCallback from './pages/WechatCallback';
+import { useAuthStore } from './lib/auth';
+import { useProfileStore } from './store/useProfileStore';
 
 /** 全屏沉浸式的玩法页面不显示顶部/底部栏 */
-const IMMERSIVE = [/^\/play\//, /^\/games\/(listen|build|shadow|talk)/];
+const IMMERSIVE = [/^\/play\//, /^\/games\/(listen|build|shadow|talk)/, /^\/login$/, /^\/leaderboard$/, /^\/auth\/wechat\/callback$/];
 
 function Shell() {
   const location = useLocation();
   const immersive = IMMERSIVE.some((re) => re.test(location.pathname));
   const sfxEnabled = useSettingsStore((s) => s.sfxEnabled);
+  const initAuth = useAuthStore((s) => s.init);
 
   useEffect(() => {
     setSfxEnabled(sfxEnabled);
   }, [sfxEnabled]);
+
+  useEffect(() => {
+    (async () => {
+      await initAuth();
+      if (useAuthStore.getState().user) {
+        try {
+          await useProfileStore.getState().syncFromCloud();
+        } catch {
+          /* 同步失败不影响启动 */
+        }
+      }
+    })();
+  }, [initAuth]);
 
   useEffect(() => {
     window.scrollTo({ top: 0 });
@@ -47,6 +66,9 @@ function Shell() {
           <Route path="/games/talk" element={<FreeTalk />} />
           <Route path="/stats" element={<Stats />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/auth/wechat/callback" element={<WechatCallback />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

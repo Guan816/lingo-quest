@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.lingoquest.app',
-  appName: 'LingoQuest',
+  appId: 'com.maneji.app',
+  appName: '漫记',
   webDir: 'dist',
   bundledWebRuntime: false,
   loggingBehavior: 'none',

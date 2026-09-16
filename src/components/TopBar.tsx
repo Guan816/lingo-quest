@@ -1,10 +1,12 @@
-import { Flame, Settings2 } from 'lucide-react';
+import { Flame, Settings2, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useProfileStore, useTodayXp } from '../store/useProfileStore';
+import { useAuthStore } from '../lib/auth';
 import { levelInfo } from '../lib/gamification';
 
 export function TopBar() {
   const nav = useNavigate();
+  const user = useAuthStore((s) => s.user);
   const xp = useProfileStore((s) => s.xp);
   const combo = useProfileStore((s) => s.combo);
   const dailyGoal = useProfileStore((s) => s.dailyGoal);
@@ -44,6 +46,20 @@ export function TopBar() {
             <span className="text-sm font-black">{combo}</span>
           </div>
         )}
+
+        <button
+          onClick={() => nav(user ? '/leaderboard' : '/login')}
+          aria-label={user ? '排行榜' : '登录'}
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-white text-ink-soft shadow-pop-sm btn-pop"
+        >
+          {user ? (
+            <span className="text-sm font-black text-brand-600">
+              {(user.display_name || '?').slice(0, 1)}
+            </span>
+          ) : (
+            <User size={18} strokeWidth={2.6} />
+          )}
+        </button>
 
         <button
           onClick={() => nav('/settings')}

@@ -4,6 +4,7 @@ import type { LevelProgress, PlayerStats } from '../types';
 import { ACHIEVEMENTS } from '../data/achievements';
 import { levelInfo, xpForClear, xpForSentence } from '../lib/gamification';
 import { todayKey, uid } from '../lib/utils';
+import { api } from '../lib/api';
 
 const EMPTY_STATS: PlayerStats = {
   totalXp: 0,
@@ -45,6 +46,8 @@ interface ProfileState {
   dailyGoal: number;
   lastLevelId: string | null;
   lastReward: RewardEvent | null;
+  lastSyncAt: string;
+  isSyncing: boolean;
 
   addXp: (n: number) => void;
   registerSentence: (input: SentenceInput) => RewardEvent;
@@ -53,10 +56,34 @@ interface ProfileState {
   markToday: () => void;
   setDailyGoal: (n: number) => void;
   resetProfile: () => void;
+  syncFromCloud: () => Promise<void>;
+  pushToCloud: () => Promise<void>;
 }
 
 function unlockedFrom(stats: PlayerStats): string[] {
   return ACHIEVEMENTS.filter((a) => a.test(stats)).map((a) => a.id);
+}
+
+/* ───── 云同步辅助：仅在已登录时排队推送 ───── */
+let pushTimer: ReturnType<typeof setTimeout> | null = null;
+
+function getCloudToken(): string | null {
+  try {
+    const raw = localStorage.getItem('maneji-auth');
+    if (!raw) return null;
+    const j = JSON.parse(raw);
+    return j?.state?.token ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function queuePush() {
+  if (!getCloudToken()) return;
+  if (pushTimer) clearTimeout(pushTimer);
+  pushTimer = setTimeout(() => {
+    useProfileStore.getState().pushToCloud();
+  }, 1200);
 }
 
 export const useProfileStore = create<ProfileState>()(
@@ -73,6 +100,8 @@ export const useProfileStore = create<ProfileState>()(
       dailyGoal: 60,
       lastLevelId: null,
       lastReward: null,
+      lastSyncAt: '1970-01-01T00:00:00.000Z',
+      isSyncing: false,
 
       addXp: (n) => {
         const s = get();
@@ -82,6 +111,7 @@ export const useProfileStore = create<ProfileState>()(
           todayDate: todayKey(),
           stats: { ...s.stats, totalXp: s.stats.totalXp + n },
         });
+        queuePush();
       },
 
       registerSentence: (input) => {
@@ -131,6 +161,7 @@ export const useProfileStore = create<ProfileState>()(
           todayDate: todayKey(),
           lastReward: reward,
         });
+        queuePush();
         return reward;
       },
 
@@ -160,6 +191,7 @@ export const useProfileStore = create<ProfileState>()(
           todayDate: todayKey(),
           lastLevelId: levelId,
         });
+        queuePush();
       },
 
       markToday: () => {
@@ -167,6 +199,7 @@ export const useProfileStore = create<ProfileState>()(
         const key = todayKey();
         if (s.stats.practiceDays.includes(key)) return;
         set({ stats: { ...s.stats, practiceDays: [...s.stats.practiceDays, key] } });
+        queuePush();
       },
 
       setDailyGoal: (n) => set({ dailyGoal: n }),
@@ -184,6 +217,61 @@ export const useProfileStore = create<ProfileState>()(
           lastLevelId: null,
           lastReward: null,
         }),
+
+      syncFromCloud: async () => {
+        if (get().isSyncing || !getCloudToken()) return;
+        set({ isSyncing: true });
+        try {
+          const data = await api.syncPull(get().lastSyncAt);
+          set((state) => {
+            const progress = { ...state.progress };
+            for (const p of data.progress as Array<{
+              level_id: string;
+              stars: number;
+              best_score: number;
+              data?: { cleared?: boolean };
+            }>) {
+              const cur = progress[p.level_id];
+              progress[p.level_id] = {
+                stars: Math.max(p.stars ?? 0, cur?.stars ?? 0),
+                bestScore: Math.max(p.best_score ?? 0, cur?.bestScore ?? 0),
+                cleared: cur?.cleared || p.data?.cleared || false,
+              };
+            }
+            const totalXp = Math.max(state.stats.totalXp, data.user.total_xp ?? 0);
+            return {
+              progress,
+              stats: { ...state.stats, totalXp },
+              lastSyncAt: data.serverTime,
+            };
+          });
+        } catch {
+          /* 离线或失败忽略 */
+        } finally {
+          set({ isSyncing: false });
+        }
+      },
+
+      pushToCloud: async () => {
+        if (!getCloudToken()) return;
+        const s = get();
+        try {
+          await api.syncPush({
+            total_xp: s.stats.totalXp,
+            streak: s.stats.practiceDays.length,
+            progress: Object.entries(s.progress).map(([levelId, p]) => ({
+              level_id: levelId,
+              stars: p.stars,
+              best_score: p.bestScore,
+              data: { cleared: p.cleared },
+              updated_at: new Date().toISOString(),
+            })),
+          });
+          set({ lastSyncAt: new Date().toISOString() });
+        } catch {
+          /* 离线忽略 */
+        }
+      },
     }),
     {
       name: 'lingoquest.profile.v1',
@@ -199,6 +287,7 @@ export const useProfileStore = create<ProfileState>()(
         todayDate: s.todayDate,
         dailyGoal: s.dailyGoal,
         lastLevelId: s.lastLevelId,
+        lastSyncAt: s.lastSyncAt,
       }),
     },
   ),

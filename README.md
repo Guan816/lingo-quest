@@ -1,115 +1,126 @@
-<div align="center">
+# 漫记 · 玩着学的 AI 口语陪练
 
-# 🎮 LingoQuest · 玩着学的 AI 口语陪练
+> Game-like AI speaking coach. Learn English by **playing** — 闯关地图、发音打分、AI 角色对话。一套代码同时跑网页、Android 与 iOS。
 
-**闯关地图 · 发音逐词打分 · AI 角色对话 · 离线也能玩**
+- 🎮 四种玩法：听音选词 / 拼句挑战 / 影子跟读 / Boss 对话
+- 🗺️ 游戏化：XP、等级、连击、成就、每日任务、关卡地图
+- 🤖 双引擎：内置离线剧本引擎（**零配置、零网络即可玩**）+ 设置页填 OpenAI 兼容 API 走真实 LLM
+- 🔊 Web Speech 朗读与识别 + 本地发音评分（设备不支持识别时自动降级为打字模式）
+- 👤 支持账号登录、跨设备进度同步、多人排行榜（云同步/排行榜需自备后端服务，未配置时不影响离线游玩）
 
-一套代码 → 网页 + Android APK + iOS，零后端、零成本部署。
+**技术栈**：React + TypeScript + Vite + Tailwind，用 Capacitor 打包为 Android / iOS 应用。
 
-</div>
+> 💡 **不登录也能玩**：进度存在本机 `localStorage`，无需任何服务端。
 
 ---
 
-## ✨ 这是什么
+## 快速开始
 
-LingoQuest 把口语练习做成一场 RPG：开口说一句英语 = 打一次怪，得分换经验、经验升等级、连击有加成、通关掉星星。它不是一个「录音机 + 教材」，而是一个你会想每天打开的小游戏。
+```bash
+# 1. 安装依赖
+npm install
 
-| 能力 | 说明 |
+# 2. 启动开发服务器
+npm run dev
+```
+
+浏览器打开终端提示的地址（默认 http://localhost:5173）即可。
+
+> ⚠️ **不要双击 `index.html`** —— 这是 Vite + React 项目，必须通过开发服务器访问。
+> 直接双击会走 `file://` 协议，浏览器会拦掉模块脚本，页面一片空白。
+
+### 构建生产版本
+```bash
+npm run build     # 类型检查 + 打包，产物在 dist/
+npm run preview   # 本地预览构建结果
+```
+
+---
+
+## 开发命令
+
+| 命令 | 作用 |
 | --- | --- |
-| 🗺️ 闯关地图 | 5 个世界 × 25 关：跟读句 → 剧本角色扮演 → BOSS 自由对话，线性解锁 |
-| 🎯 发音打分 | 本地逐词比对算法：哪读对了、哪漏了、哪读错，当场标红，无需上传录音 |
-| 💬 AI 陪练 | 填入任意 OpenAI 兼容 Key（DeepSeek / 通义 / Kimi / Ollama…）即接入真 LLM 自由对话 |
-| 🔌 离线兜底 | 没 Key、没网也能玩：内置 8 个剧本状态机 + 关键词对话引擎，进度照常记录 |
-| 🎧 四种小游戏 | 听音选词 / 拼句挑战 / 影子跟读 / 自由对话，每个 2 分钟 |
-| 🏆 游戏化系统 | XP、等级、连击、星星、14 枚成就徽章、每日目标、打卡日历 |
-| 📱 全平台 | Web（GitHub Pages / PWA）+ Android APK + iOS，同一份代码 |
-| 🔒 隐私 | 练习数据全存本地 localStorage；API Key 只存本机，不出设备 |
+| `npm run dev` | 启动开发服务器（热更新） |
+| `npm run build` | 类型检查 + 打包生产版本 |
+| `npm run preview` | 预览打包结果 |
+| `npm run typecheck` | 只做 TypeScript 类型检查 |
+| `npm run cap:sync` | 构建并同步到 Capacitor 原生工程 |
+| `npm run cap:android` | 打开 Android Studio 出包 |
 
-## 🚀 快速开始
+---
 
+## 打包到手机
+
+### 网页版（最快）
+部署到任意静态托管（GitHub Pages / Cloudflare Pages / Vercel）后，
+手机浏览器打开 →「添加到主屏幕」，即可当 App 使用。
+
+仓库附带 `.github/workflows/deploy-pages.yml`：推送到 `main` 后自动部署。
+
+### Android APK
 ```bash
-# 开发
-npm install
-npm run dev            # http://localhost:5173
-
-# 构建（产物在 dist/，可直接静态托管）
-npm run build
-npm run preview
+npm run cap:sync      # 构建网页并同步到 android/ 工程
+npm run cap:android   # 在 Android Studio 里 Build → APK
 ```
 
-## 📱 打包成手机 App（Capacitor）
+仓库同样附带 `.github/workflows/build-android.yml`：推送到 `main` 会自动构建 APK，
+在 Actions 运行记录的 Artifacts 中下载安装。打 `v1.0.0` tag 会把 APK 挂到 Release 页面。
 
-### 方式一：让 GitHub Actions 替你出包（推荐）
+> 本地打包需要已安装 JDK 17 + Android SDK；仅想体验的话用上面的网页版即可。
 
-1. Fork / 推送本仓库到 GitHub
-2. 打开 **Actions → Build Android APK**，手动触发或 push 即可
-3. 构建完成后在 Artifacts 下载 `LingoQuest-APK`，传到手机直接安装
-4. 打 tag（如 `v1.0.0`）时 APK 会自动挂到 GitHub Release
-
-### 方式二：本机打包
-
+### iOS
+需要 macOS + Xcode：
 ```bash
-npm install
-npm run build
-npx cap add android        # 首次
-npx cap sync android
-npx cap open android       # 用 Android Studio 打开后 Run / Build APK
+npm run cap:sync
+npx cap open ios
 ```
 
-> 原生 `android/`、`ios/` 目录不入库（已被 .gitignore），由 `cap add` 按需生成。
-> iOS 需要 macOS + Xcode：`npx cap add ios && npx cap open ios`。
-> 自定义 App 名称/图标可用 [`@capacitor/assets`](https://github.com/ionic-team/capacitor-assets) 一键生成。
+---
 
-### 网页版部署（GitHub Pages）
+## 玩法与设计
 
-仓库自带 `deploy-pages.yml`：push 到 `main` 即自动部署到 Pages，手机浏览器打开后「添加到主屏幕」就是一个 PWA。
+**一次完整开口回合**：听示范朗读（TTS）→ 点麦克风开口 → 实时识别 → 即时打分 → 进入下一句。
 
-## 🤖 接入 AI（可选，1 分钟）
+**发音评分**：本地算法，综合「词序匹配 + 编辑距离 + 长度」，不依赖云端，离线可用。
 
-设置 → AI 对话 → 打开开关，选一个预设或手填：
+**AI 对话**：
+- 设置页填入任意 **OpenAI 兼容**接口（BaseURL / Key / 模型，支持 DeepSeek、通义、Moonshot 等），走真实大模型自由对话；
+- 不填也能玩：内置离线剧本引擎按剧情树推进，零成本、零配置。
 
-| 服务商 | Base URL | 模型示例 | 备注 |
-| --- | --- | --- | --- |
-| OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` | 海外 |
-| DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` | 国内直连 |
-| Moonshot | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` | Kimi |
-| 通义千问 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` | 阿里 |
-| 本地 Ollama | `http://localhost:11434/v1` | `qwen2.5:3b` | 无需 Key |
+---
 
-任何 OpenAI `/chat/completions` 兼容接口都能用。**不配置也完全可以玩**：BOSS 战会退回内置的离线对话引擎。
-
-## 🗂️ 目录结构
+## 目录结构
 
 ```
-src/
-├── data/            # 内容层：词库 / 剧本 / 课程关卡 / 成就
-├── lib/             # 能力层
-│   ├── speech.ts        # Web Speech 封装（TTS 朗读 + ASR 识别）
-│   ├── scoring.ts       # 逐词发音评分（缩写归一 + LCS 对齐 + 编辑距离）
-│   ├── offlineEngine.ts # 剧本状态机 + 关键词离线对话
-│   ├── ai.ts            # OpenAI 兼容客户端（5 家预设）
-│   ├── gamification.ts  # XP / 等级 / 连击公式
-│   └── sfx.ts           # Web Audio 现场合成音效（零资源文件）
-├── store/           # zustand + localStorage 持久化
-├── components/      # MicOrb、SpeakPanel、ScoreRing、结算/奖励组件…
-└── pages/           # 首页 / 地图 / 关卡 / 4 个小游戏 / 数据 / 设置
+.
+├─ src/
+│  ├─ lib/          # api / auth / speech / scoring / ai / offlineEngine / sfx
+│  ├─ store/        # zustand 状态：进度、设置、登录态
+│  ├─ pages/        # 首页 / 关卡地图 / 闯关 / 游戏中心 / 统计 / 设置 / 登录 / 排行榜
+│  ├─ components/   # UI 组件（顶栏、麦克风、奖励弹层…）
+│  ├─ data/         # 词库 / 剧本 / 关卡地图 / 成就
+│  └─ hooks/
+├─ public/              # 图标与 PWA manifest
+├─ .github/workflows/   # APK 构建 + Pages 部署
+└─ tools/gen-icons.mjs  # PWA 图标生成脚本
 ```
 
-## 🧠 技术要点
+---
 
-- **打分完全本地**：识别文本与目标句做缩写展开（`don't → do not`）后，词级 LCS 对齐 + 近似匹配（编辑距离 ≤1）+ 字符相似度加权，输出逐词染色结果
-- **语音识别**：浏览器 Web Speech API；不支持时自动切换「打字模式」，打字照样打分拿经验，保证任何设备都能完整通关
-- **音效零资源**：所有提示音用 Web Audio 振荡器现场合成，安装包更小
-- **双引擎对话**：`ai.enabled` 且有 Key 时走 LLM，任何失败（超时/断网/限流）无缝退回离线引擎，BOSS 战永不中断
-- **状态持久化**：zustand + persist，升级时按 version 迁移
+## 扩展语言包 / 关卡
 
-## 🗺️ 路线图
+关卡与剧本数据集中在 `src/data/`：
 
-- [ ] 多语言包（日语 / 西语）
-- [ ] 每日一句挑战 + 好友排行
-- [ ] Whisper 级本地 ASR（可选插件）
-- [ ] 发音音素级评测
+- `curriculum.ts` —— 关卡地图（世界 → 关卡 → 句子）
+- `scenarios.ts` —— 离线对话剧本树
+- `vocabulary.ts` —— 词库（听音选词用）
+- `achievements.ts` —— 成就规则
 
-## 📄 License
+往这些文件里加内容即可扩展语言包与玩法，无需改动 UI 逻辑。
 
-[MIT](./LICENSE) — 随便用，记得回来点个 Star ⭐
+---
+
+## License
+
+MIT
