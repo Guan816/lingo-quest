@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, Flame, Headphones, Mic2, Play, Sparkles } from 'lucide-react';
+import { ChevronRight, Flame, GraduationCap, Headphones, Mic2, Play, Sparkles } from 'lucide-react';
 import { Button, Chip, ProgressBar, SectionTitle } from '../components/ui';
 import { useProfileStore, useTodayXp } from '../store/useProfileStore';
+import { useCet4Store, pendingWrongCount } from '../store/useCet4Store';
 import { ALL_LEVELS, getLevel } from '../data/curriculum';
 import { ACHIEVEMENTS } from '../data/achievements';
 import { levelInfo } from '../lib/gamification';
@@ -57,6 +58,7 @@ export default function Home() {
   const streak = streakOf(stats.practiceDays);
   const sentencesToday = todayDate === todayKey() ? todaySentences : 0;
   const unlocked = ACHIEVEMENTS.filter((a) => achievements.includes(a.id));
+  const pendingWrong = useCet4Store((s) => pendingWrongCount(s.wrong));
 
   return (
     <div className="space-y-6 pt-1">
@@ -127,6 +129,43 @@ export default function Home() {
             />
           </div>
         </div>
+      </section>
+
+      {/* 四级备考入口 */}
+      <section>
+        <SectionTitle
+          action={
+            <button
+              onClick={() => nav('/cet4')}
+              className="flex items-center gap-0.5 text-xs font-black text-brand-600"
+            >
+              进入四级 <ChevronRight size={14} strokeWidth={3} />
+            </button>
+          }
+        >
+          四级备考
+        </SectionTitle>
+        <button
+          onClick={() => nav('/cet4')}
+          className="btn-pop relative w-full overflow-hidden rounded-3xl bg-gradient-to-br from-grape-500 to-brand-600 p-4 text-left text-white shadow-card"
+        >
+          <div className="relative z-10">
+            <p className="text-base font-black">0 基础，冲着 425 分去</p>
+            <p className="mt-0.5 text-xs text-white/85">
+              听力 · 阅读 · 翻译 · 写作，按四级真题题型练
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-bold">
+              <span className="rounded-full bg-white/20 px-2.5 py-1">🎲 考官随机抽题</span>
+              <span className="rounded-full bg-white/20 px-2.5 py-1">
+                📕 错题本{pendingWrong > 0 ? ` ${pendingWrong}` : ''}
+              </span>
+            </div>
+          </div>
+          <GraduationCap
+            className="absolute -bottom-4 -right-4 h-24 w-24 text-white/15"
+            strokeWidth={1.5}
+          />
+        </button>
       </section>
 
       {/* 快捷玩法 */}

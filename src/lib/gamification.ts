@@ -54,16 +54,3 @@ export function xpForSentence(score: number, combo: number): number {
 export function xpForClear(stars: number, isBoss: boolean): number {
   return 30 + stars * 20 + (isBoss ? 50 : 0);
 }
-
-/** 连击倍率展示用（1.0 ~ 2.0） */
-export function comboMultiplier(combo: number): number {
-  return 1 + Math.min(combo, 20) * 0.05;
-}
-
-export function comboTag(combo: number): { text: string; emoji: string } | null {
-  if (combo >= 15) return { text: '势不可挡', emoji: '🔥' };
-  if (combo >= 10) return { text: '手感火热', emoji: '🔥' };
-  if (combo >= 5) return { text: '渐入佳境', emoji: '⚡' };
-  if (combo >= 3) return { text: '连击中', emoji: '✨' };
-  return null;
-}

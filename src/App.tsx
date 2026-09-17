@@ -18,11 +18,21 @@ import Settings from './pages/Settings';
 import Login from './pages/Login';
 import Leaderboard from './pages/Leaderboard';
 import WechatCallback from './pages/WechatCallback';
+import Cet4 from './pages/Cet4';
+import Cet4Play from './pages/Cet4Play';
+import Cet4Wrong from './pages/Cet4Wrong';
 import { useAuthStore } from './lib/auth';
 import { useProfileStore } from './store/useProfileStore';
 
 /** 全屏沉浸式的玩法页面不显示顶部/底部栏 */
-const IMMERSIVE = [/^\/play\//, /^\/games\/(listen|build|shadow|talk)/, /^\/login$/, /^\/leaderboard$/, /^\/auth\/wechat\/callback$/];
+const IMMERSIVE = [
+  /^\/play\//,
+  /^\/games\/(listen|build|shadow|talk)/,
+  /^\/cet4\/play\//,
+  /^\/login$/,
+  /^\/leaderboard$/,
+  /^\/auth\/wechat\/callback$/,
+];
 
 function Shell() {
   const location = useLocation();
@@ -69,6 +79,9 @@ function Shell() {
           <Route path="/login" element={<Login />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route path="/auth/wechat/callback" element={<WechatCallback />} />
+          <Route path="/cet4" element={<Cet4 />} />
+          <Route path="/cet4/play/:kind" element={<Cet4Play />} />
+          <Route path="/cet4/wrong" element={<Cet4Wrong />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

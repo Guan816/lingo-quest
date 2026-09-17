@@ -6,6 +6,15 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
+permissions:
+  contents: write
+
+env:
+  # APK 内嵌的后端地址。
+  # 打包成原生 App 后页面走 file:// 协议，相对路径 /api 会解析失败，
+  # 所以必须在这里注入完整地址。换服务器时改这一行即可。
+  VITE_API_BASE: 'http://106.14.70.32/api'
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,6 +32,8 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - uses: android-actions/setup-android@v3
+
       - name: Install deps
         run: npm ci
 
@@ -34,6 +45,16 @@ jobs:
           npx cap add android
           npx cap sync android
 
+      - name: Allow cleartext HTTP
+        run: |
+          # 后端目前是 http（无域名无证书），Android 9+ 默认禁止明文流量，
+          # 这里给 WebView 放行，否则 App 内所有 API 请求都会被系统拦截。
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          if ! grep -q 'usesCleartextTraffic' "$MANIFEST"; then
+            sed -i 's|<application|<application android:usesCleartextTraffic="true"|' "$MANIFEST"
+          fi
+          grep -o 'android:usesCleartextTraffic="true"' "$MANIFEST" || echo "警告：明文流量未放行"
+
       - name: Grant gradlew permission
         run: chmod +x android/gradlew
 
@@ -43,17 +64,18 @@ jobs:
       - name: Rename APK
         run: |
           mkdir -p out
-          cp android/app/build/outputs/apk/debug/app-debug.apk out/LingoQuest-debug.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk out/maneji-debug.apk
+          echo "APK 大小: $(du -h out/maneji-debug.apk | cut -f1)"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LingoQuest-APK
-          path: out/LingoQuest-debug.apk
-          retention-days: 30
+          name: maneji-apk
+          path: out/maneji-debug.apk
+          retention-days: 90
 
       - name: Attach APK to release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: out/LingoQuest-debug.apk
+          files: out/maneji-debug.apk

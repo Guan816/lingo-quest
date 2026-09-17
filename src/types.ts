@@ -135,3 +135,61 @@ export interface ChatMessage {
   zh?: string;
   score?: number;
 }
+
+/* ============================================================
+ *  大学英语四级（CET-4）专项
+ *  题型对齐真实四级卷：听力 35% / 阅读 35% / 写作 15% / 翻译 15%
+ * ============================================================ */
+
+/** 四级题型 */
+export type Cet4Kind =
+  // 听力（35%）
+  | 'news' // 短篇新闻
+  | 'conversation' // 长对话
+  | 'passage' // 听力篇章
+  // 阅读（35%）
+  | 'banked' // 选词填空
+  | 'matching' // 长篇阅读匹配
+  | 'careful' // 仔细阅读
+  // 词汇 / 语法基础（贯穿各题型）
+  | 'vocab'
+  // 翻译 / 写作（主观题）
+  | 'translation'
+  | 'writing';
+
+/** 客观题（选择题 / 选词填空 / 匹配题都归到这里） */
+export interface Cet4Question {
+  id: string;
+  kind: Cet4Kind;
+  /** 听力原文或阅读文章；听力题会用 TTS 朗读它 */
+  material?: string;
+  /** 材料的中文提示（如场景说明） */
+  materialZh?: string;
+  /** 题干 */
+  stem: string;
+  /** 选项（一般 4 个） */
+  options: string[];
+  /** 正确选项下标 */
+  answer: number;
+  /** 中文解析 */
+  explain?: string;
+  /** 来源风格标注，如「2023.6 真题风格」 */
+  tag?: string;
+}
+
+/** 主观题：翻译 / 写作 */
+export interface Cet4Writing {
+  id: string;
+  kind: 'translation' | 'writing';
+  /** 翻译给中文段落；写作给英文题目要求 */
+  prompt: string;
+  /** 写作的中文提示 */
+  promptZh?: string;
+  /** 参考译文 / 范文 */
+  sample: string;
+  /** 评分要点 */
+  points: string[];
+  /** 高分表达 */
+  phrases?: { en: string; zh: string }[];
+  tag?: string;
+}

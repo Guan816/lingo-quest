@@ -168,8 +168,3 @@ export function offlineReply(userText: string, turn: number): OfflineReply {
   const fu = FOLLOW_UPS[turn % FOLLOW_UPS.length];
   return { en: fu.en, zh: fu.zh, hint: HINTS[turn % HINTS.length] };
 }
-
-/** 「不会说」时给出的参考答案（用于剧本关） */
-export function sampleAnswer(targetEn: string): string {
-  return targetEn;
-}

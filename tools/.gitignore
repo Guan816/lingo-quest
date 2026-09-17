@@ -1,0 +1,4 @@
+# 本目录下带下划线前缀的是临时运维脚本，不进仓库
+_*.sh
+ssh_run.py
+ssh_upload.py
