@@ -40,5 +40,7 @@ dist-node-tmp/
 *.tsbuildinfo
 
 # 本地数据与密钥
-data/
+# 注意：只忽略仓库根目录的 data/，不要写成裸的 data/，
+# 否则会连 src/data/ 一起误伤（cet4 题库就因为这条规则漏提交过）。
+/data/
 .env
