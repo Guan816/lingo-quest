@@ -82,7 +82,7 @@ export const useCet4Store = create<Cet4State>()(
       resetCet4: () =>
         set({ answered: 0, correct: 0, bestStars: {}, sessions: 0, lastKind: null, wrong: [] }),
     }),
-    { name: 'lingoquest.cet4.v1', version: 1 },
+    { name: 'maneji.cet4.v1', version: 1 },
   ),
 );
 

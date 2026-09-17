@@ -45,7 +45,7 @@ export const useSettingsStore = create<SettingsState>()(
         }),
     }),
     {
-      name: 'lingoquest.settings.v1',
+      name: 'maneji.settings.v1',
       version: 1,
     },
   ),

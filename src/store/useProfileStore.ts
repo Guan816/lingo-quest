@@ -274,7 +274,7 @@ export const useProfileStore = create<ProfileState>()(
       },
     }),
     {
-      name: 'lingoquest.profile.v1',
+      name: 'maneji.profile.v1',
       version: 1,
       partialize: (s) => ({
         xp: s.xp,
