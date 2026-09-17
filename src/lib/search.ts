@@ -47,6 +47,23 @@ function endpoint(base: string): string {
 }
 
 /**
+ * 把地址字符串安全地变成 URL 对象。
+ *
+ * 踩过的坑：这里原先直接写 `new URL(endpoint(...))`。
+ * 当默认地址是相对路径 `/search` 时，**`new URL()` 缺少 base 会抛
+ * TypeError**，异常又被下面的 catch 吞成「搜索服务不可用」，
+ * 表现为点「测试搜索」永远失败、而且一个网络请求都不发。
+ * 所以相对路径必须补上当前站点作为基准。
+ */
+function toUrl(raw: string): URL {
+  const base =
+    typeof window !== 'undefined' && window.location
+      ? window.location.origin
+      : 'http://localhost';
+  return new URL(raw, base);
+}
+
+/**
  * 搜一次。失败不抛异常 —— 搜索挂了也必须让对话继续跑，
  * 只是退化成「没有实时信息」而已。
  */
@@ -63,7 +80,7 @@ export async function webSearch(
   opts.signal?.addEventListener('abort', () => ctrl.abort(), { once: true });
 
   try {
-    const url = new URL(endpoint(opts.baseUrl ?? DEFAULT_SEARCH_BASE));
+    const url = toUrl(endpoint(opts.baseUrl ?? DEFAULT_SEARCH_BASE));
     url.searchParams.set('q', q);
     url.searchParams.set('format', 'json');
     url.searchParams.set('language', 'zh-CN');
@@ -87,10 +104,12 @@ export async function webSearch(
     return { ok: true, hits };
   } catch (err) {
     const aborted = err instanceof Error && err.name === 'AbortError';
+    // 把真实原因带出来 —— 之前统一报「不可用」，配置写错和网络不通分不清
+    const detail = err instanceof Error ? err.message : String(err);
     return {
       ok: false,
       hits: [],
-      error: aborted ? '搜索超时' : '搜索服务不可用',
+      error: aborted ? '搜索超时' : `搜索服务不可用（${detail.slice(0, 60)}）`,
     };
   } finally {
     clearTimeout(timer);

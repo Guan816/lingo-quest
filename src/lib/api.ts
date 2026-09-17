@@ -1,35 +1,73 @@
 // 漫记前端 API 客户端。base 默认走 vite 代理的 /api（开发）或 VITE_API_BASE（生产）。
 const BASE: string = (import.meta as any).env?.VITE_API_BASE || '/api';
 
+/* ─────────────── 混合内容诊断 ─────────────── */
+
 /**
- * 混合内容拦截检测。
+ * 判断当前是否处于「页面加密、接口明文」的处境。
  *
- * 安全上下文（https 页面 / Capacitor 的 https://localhost）里，浏览器会
- * 直接拦掉发往 http:// 的 fetch —— 请求根本不出网，控制台只留一行
- * Mixed Content 报错，用户侧表现为「点了没反应」。这里主动探测一次，
- * 让上层能弹出可读的提示，而不是静默失败。
+ * 踩过的坑：早先这里是**预检** —— 只要安全上下文 + BASE 是 http 就提前抛错，
+ * 结果把能走通的路堵死了。因为 Capacitor 的 WebView origin 是
+ * `https://localhost`，isSecureContext 为 true，但 capacitor.config.ts 里
+ * 开了 `allowMixedContent`，请求其实是能正常发出的。
+ * 于是 APK 里一点注册就报错，而浏览器里却没事。
+ *
+ * 所以现在只做**事后诊断**：请求真的失败了，再用它判断原因。
  */
-let mixedContentWarned = false;
-export function isMixedContentBlocked(): boolean {
+function isSecureContextHttpApi(): boolean {
   if (typeof window === 'undefined') return false;
-  if (mixedContentWarned) return true;
   try {
-    const secure = window.isSecureContext === true;
-    const blocked = secure && /^http:\/\//i.test(BASE);
-    if (blocked) mixedContentWarned = true;
-    return blocked;
+    return window.isSecureContext === true && /^http:\/\//i.test(BASE);
   } catch {
     return false;
   }
 }
 
+/** 接口地址的 host（用于判断能否做 http 回退） */
+function apiHost(): string | null {
+  try {
+    return new URL(BASE).host || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 浏览器场景的补救：能否把页面从 https 切回 http。
+ *
+ * 现在的手机浏览器默认「优先 HTTPS」，会把 http://106.14.70.32 悄悄升级成
+ * https。服务器没开 443，于是页面可能勉强打开、但所有接口都被拦。
+ * 只要接口和页面是同一个 host，就允许切回去。
+ */
+export function canFallbackToHttp(): boolean {
+  if (typeof window === 'undefined') return false;
+  if (window.location.protocol !== 'https:') return false;
+  const h = apiHost();
+  return !!h && h === window.location.host;
+}
+
+/** 执行 http 回退（由用户点按钮触发，不自动跳，避免来回重定向） */
+export function fallbackToHttp(): void {
+  if (typeof window === 'undefined') return;
+  const h = apiHost();
+  if (!h) return;
+  const { pathname, search, hash } = window.location;
+  window.location.replace(`http://${h}${pathname}${search}${hash}`);
+}
+
 /** 给低层错误补一句人话，避免用户只看到 "Failed to fetch" */
 function friendly(e: unknown, path: string): Error {
   const msg = e instanceof Error ? e.message : String(e);
-  if (isMixedContentBlocked()) {
-    return new Error('当前页面是加密访问，而服务器只支持 http，请求被浏览器拦截。请改用 http 地址打开。');
+
+  // 请求已经失败了，这时才判断是不是混合内容的问题
+  if (isSecureContextHttpApi()) {
+    return new Error(
+      canFallbackToHttp()
+        ? '接口被拦截了：页面是 https，而服务器只有 http。点下面的按钮切回 http 就能用。'
+        : '请求被拦截了。如果是在浏览器里，请改用 http:// 地址打开（服务器暂未支持 https）。',
+    );
   }
-  if (/failed to fetch|networkerror|load failed/i.test(msg)) {
+  if (/failed to fetch|networkerror|load failed|err_failed|err_connection/i.test(msg)) {
     return new Error(`连不上服务器（${path}），请检查网络后重试`);
   }
   return e instanceof Error ? e : new Error(msg);
@@ -47,15 +85,15 @@ function getToken(): string | null {
 }
 
 async function request(path: string, opts: RequestInit = {}): Promise<any> {
-  if (isMixedContentBlocked()) {
-    throw new Error('当前页面是加密访问，而服务器只支持 http，请求被浏览器拦截。请改用 http 地址打开。');
-  }
+  // 注意：这里**不做**任何前置拦截。先老老实实发请求，
+  // 能不能通由浏览器/WebView 决定，失败了再看 friendly() 怎么解释。
   const token = getToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(opts.headers as Record<string, string> | undefined),
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
+
   let res: Response;
   try {
     res = await fetch(BASE + path, { ...opts, headers });

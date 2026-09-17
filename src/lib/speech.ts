@@ -1,4 +1,5 @@
 import type { SpeechRecognitionLike } from '../vite-env.d';
+import { requestPermission } from './permissionGate';
 
 /**
  * 语音能力封装：TTS（朗读）与 ASR（语音识别）。
@@ -197,19 +198,27 @@ export function stopListening() {
  * 录一次音并返回识别文本。
  * - 空结果（没听清）会 resolve 一个 empty=true 的结果而不是报错；
  * - 真正不可用时 reject SpeechError，调用方应切换到打字模式。
+ *
+ * 权限：进这里之前先过权限门控。没授权时会弹一个应用内说明，
+ * 用户点「允许」才触发系统授权框；被拒则抛 permission 错误，
+ * 由调用方切到打字模式。
  */
-export function listen(opts: ListenOptions = {}): Promise<ListenResult> {
-  return new Promise((resolve, reject) => {
-    if (typeof window === 'undefined') {
-      reject(new SpeechError('unsupported', '当前环境不支持语音识别'));
-      return;
-    }
-    const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Ctor) {
-      reject(new SpeechError('unsupported', '当前浏览器不支持语音识别'));
-      return;
-    }
+export async function listen(opts: ListenOptions = {}): Promise<ListenResult> {
+  // 先确认能力，再申请权限 —— 语音识别根本不可用时不该去打扰用户要麦克风
+  if (typeof window === 'undefined') {
+    throw new SpeechError('unsupported', '当前环境不支持语音识别');
+  }
+  const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!Ctor) {
+    throw new SpeechError('unsupported', '当前浏览器不支持语音识别');
+  }
 
+  const permitted = await requestPermission('microphone');
+  if (!permitted) {
+    throw new SpeechError('permission', '没有麦克风权限，已切换到打字模式');
+  }
+
+  return new Promise<ListenResult>((resolve, reject) => {
     let rec: SpeechRecognitionLike;
     try {
       rec = new Ctor();

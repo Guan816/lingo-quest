@@ -3,6 +3,8 @@ import { useEffect } from 'react';
 import { TabBar } from './components/TabBar';
 import { TopBar } from './components/TopBar';
 import { RewardToast } from './components/RewardToast';
+import { PermissionGate } from './components/PermissionGate';
+import { HttpFallbackBanner } from './components/HttpFallbackBanner';
 import { setSfxEnabled } from './lib/sfx';
 import { primeTts } from './lib/speech';
 import { useSettingsStore } from './store/useSettingsStore';
@@ -94,6 +96,7 @@ function Shell() {
   return (
     <div className="mx-auto flex min-h-full max-w-lg flex-col bg-cream">
       {!immersive && <TopBar />}
+      <HttpFallbackBanner />
       <main className={immersive ? 'flex-1' : 'flex-1 px-4 pb-4'}>
         <Routes>
           <Route path="/" element={<Home />} />
@@ -125,6 +128,8 @@ function Shell() {
       </main>
       {!immersive && <TabBar />}
       <RewardToast />
+      {/* 全局权限申请弹窗：任何地方请求麦克风等权限时都会用它 */}
+      <PermissionGate />
     </div>
   );
 }

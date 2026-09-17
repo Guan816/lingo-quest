@@ -6,6 +6,7 @@ import { webSearch } from '../lib/search';
 import { asrSupported, ttsSupported } from '../lib/speech';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useProfileStore } from '../store/useProfileStore';
+import { markGranted, requestPermission } from '../lib/permissionGate';
 import { Button, Chip, SectionTitle } from '../components/ui';
 
 export default function Settings() {
@@ -20,6 +21,7 @@ export default function Settings() {
   const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [searchTesting, setSearchTesting] = useState(false);
   const [searchMsg, setSearchMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [micMsg, setMicMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const runTest = async () => {
     setTesting(true);
@@ -159,8 +161,8 @@ export default function Settings() {
 
                     <p className="text-[11px] leading-relaxed text-ink-faint">
                       搜索走的是 <span className="font-black">SearXNG</span>（开源元搜索引擎，无需 API Key）。
-                      默认实例在国内可能较慢，建议自建：服务器上一条 Docker 命令即可，
-                      然后把地址填进来。
+                      默认已指向本项目自建的服务，留空即可用。想换成自己的实例就把地址填进来
+                      （带不带 <span className="font-mono">/search</span> 都行）。
                     </p>
                   </>
                 )}
@@ -287,6 +289,48 @@ export default function Settings() {
               <Chip tone="sun">不可用</Chip>
             )}
           </div>
+
+          {/* 主动申请麦克风权限：平时用语音时会自动弹，这里手动再给一个入口 */}
+          {asrSupported() && (
+            <div className="border-t border-ink/8 pt-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[12px] font-black text-ink">麦克风权限</p>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-ink-faint">
+                    用语音时会自动提醒。被拒绝过的话，需要到
+                    系统设置 → 应用 → 漫记 → 权限 里手动打开。
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    setMicMsg(null);
+                    const ok = await requestPermission('microphone');
+                    if (ok) markGranted('microphone');
+                    setMicMsg(
+                      ok
+                        ? { ok: true, text: '麦克风已可用' }
+                        : { ok: false, text: '还没拿到权限，可到系统设置里打开' },
+                    );
+                  }}
+                >
+                  申请
+                </Button>
+              </div>
+              {micMsg && (
+                <p
+                  className={`mt-1.5 text-[11px] font-bold ${
+                    micMsg.ok ? 'text-mint-600' : 'text-sun-600'
+                  }`}
+                >
+                  {micMsg.ok ? '✅ ' : '⚠️ '}
+                  {micMsg.text}
+                </p>
+              )}
+            </div>
+          )}
+
           <p className="pt-1 text-[11px] leading-relaxed text-ink-faint">
             语音识别依赖系统服务。国内 Android 若不可用，App 会自动切换到打字模式，
             输入你想说的句子一样能打分、拿经验。

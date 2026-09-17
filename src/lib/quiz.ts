@@ -59,13 +59,24 @@ export function shuffle<T>(arr: readonly T[]): T[] {
 
 /* ===================== 题目转换 ===================== */
 
-/** 判断字符串数组是否需要打乱选项（判断题固定「正确/错误」顺序） */
-function shuffleOptions(correctTexts: string[], all: string[]): number[] {
-  const shuffled = shuffle(all);
-  return correctTexts
-    .map((t) => shuffled.indexOf(t))
+/**
+ * 打乱选项，并给出正确答案在**同一排列**下的下标。
+ *
+ * 这里曾经出过一个严重 bug：选项在算答案下标时打乱了一次，
+ * 显示时又打乱了一次，两次是不同的排列 —— 结果是同一道题
+ * 每次点开「正确选项」都指向不同选项，答案看着像随机的。
+ * 所以现在强制只打乱一次，下标和显示共用同一个数组。
+ */
+function shuffledWithAnswer(
+  all: string[],
+  correctTexts: string[],
+): { options: string[]; answerIdx: number[] } {
+  const options = shuffle(all);
+  const answerIdx = correctTexts
+    .map((t) => options.findIndex((o) => o === t))
     .filter((i) => i >= 0)
     .sort((a, b) => a - b);
+  return { options, answerIdx };
 }
 
 /** 从数学题构造 QuizItem（选项打乱） */
@@ -74,28 +85,38 @@ export function fromMath(q: MathQuestion): QuizItem {
   const mode: QuizItemMode =
     q.kind === 'choice' ? 'single' : q.kind === 'blank' ? 'fill' : q.kind;
 
-  const options = q.options ?? [];
-  const answerIdx =
-    mode === 'single' && q.answer !== undefined && options.length
-      ? shuffleOptions([options[q.answer]], options)
-      : [];
+  const raw = q.options ?? [];
 
-  // 选择题的原始 refAnswer 存的是「A/B/C/D」这类字母，
-  // 但选项每次组卷都会打乱，字母会失效 —— 所以这里改为取选项原文。
-  const refAnswer =
-    mode === 'single' && q.answer !== undefined && options[q.answer]
-      ? options[q.answer]
-      : q.refAnswer;
+  // 选择题：打乱一次，答案下标与显示选项共用同一排列
+  if (mode === 'single' && q.answer !== undefined && raw[q.answer] !== undefined) {
+    const correctText = raw[q.answer];
+    const { options, answerIdx } = shuffledWithAnswer(raw, [correctText]);
+    return {
+      id: q.id,
+      stem: q.stem,
+      options,
+      answerIdx,
+      mode,
+      difficulty: q.difficulty,
+      chapter: q.chapter,
+      // 参考答案取选项原文 —— 字母（A/B/C/D）在打乱后会失效
+      refAnswer: correctText,
+      steps: q.steps ?? [],
+      point: q.point,
+      formula: q.formula,
+      raw: q,
+    };
+  }
 
   return {
     id: q.id,
     stem: q.stem,
-    options: options.length ? shuffle(options) : [],
-    answerIdx,
+    options: [],
+    answerIdx: [],
     mode,
     difficulty: q.difficulty,
     chapter: q.chapter,
-    refAnswer,
+    refAnswer: q.refAnswer,
     steps: q.steps ?? [],
     point: q.point,
     formula: q.formula,
@@ -105,10 +126,17 @@ export function fromMath(q: MathQuestion): QuizItem {
 
 /** 从计算机题构造 QuizItem（选项打乱；判断题不做乱序） */
 export function fromCs(q: CsQuestion): QuizItem {
-  const mode: QuizItemMode = q.kind === 'single' ? 'single' : q.kind === 'multi' ? 'multi' : q.kind === 'judge' ? 'judge' : 'fill';
+  const mode: QuizItemMode =
+    q.kind === 'single'
+      ? 'single'
+      : q.kind === 'multi'
+        ? 'multi'
+        : q.kind === 'judge'
+          ? 'judge'
+          : 'fill';
 
+  // ── 判断题：选项固定「正确 / 错误」，不参与打乱 ──
   if (mode === 'judge') {
-    // 判断题统一为「正确 / 错误」，答案下标直接由 1/0 映射
     const correct = q.answer === 1;
     return {
       id: q.id,
@@ -125,44 +153,50 @@ export function fromCs(q: CsQuestion): QuizItem {
     };
   }
 
+  const raw = q.options ?? [];
+
+  // ── 多选题 ──
   if (mode === 'multi') {
-    const arr = Array.isArray(q.answer) ? q.answer : [q.answer as number];
-    const opts = q.options ?? [];
-    const correctTexts = arr.map((i) => opts[i]).filter(Boolean);
+    const idxs = Array.isArray(q.answer) ? q.answer : [];
+    const correctTexts = idxs
+      .map((i) => raw[i])
+      .filter((x): x is string => typeof x === 'string');
+    const { options, answerIdx } = shuffledWithAnswer(raw, correctTexts);
     return {
       id: q.id,
       stem: q.stem,
-      options: shuffle(opts),
-      answerIdx: shuffleOptions(correctTexts, opts),
+      options,
+      answerIdx,
       mode,
       difficulty: q.difficulty,
       chapter: q.chapter,
-      refAnswer: correctTexts.join('、'),
+      refAnswer: correctTexts.join('、') || '（未提供答案）',
       steps: [q.explain],
       point: q.point,
       raw: q,
     };
   }
 
-  if (mode === 'single') {
-    const opts = q.options ?? [];
-    const idx = typeof q.answer === 'number' ? q.answer : 0;
+  // ── 单选题 ──
+  if (mode === 'single' && typeof q.answer === 'number' && raw[q.answer] !== undefined) {
+    const correctText = raw[q.answer];
+    const { options, answerIdx } = shuffledWithAnswer(raw, [correctText]);
     return {
       id: q.id,
       stem: q.stem,
-      options: shuffle(opts),
-      answerIdx: shuffleOptions([opts[idx]], opts),
+      options,
+      answerIdx,
       mode,
       difficulty: q.difficulty,
       chapter: q.chapter,
-      refAnswer: opts[idx] ?? '',
+      refAnswer: correctText,
       steps: [q.explain],
       point: q.point,
       raw: q,
     };
   }
 
-  // 填空：计算机里的 fill 是主观填空
+  // ── 填空（主观）──
   return {
     id: q.id,
     stem: q.stem,
