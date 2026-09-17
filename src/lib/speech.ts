@@ -20,6 +20,53 @@ export function asrSupported(): boolean {
 /* ───────────────────────── TTS ───────────────────────── */
 
 let voices: SpeechSynthesisVoice[] = [];
+/** 语音列表就绪后 resolve；Android WebView 上首次 getVoices() 往往为空，必须等事件 */
+let voicesReady: Promise<void> | null = null;
+
+/**
+ * Android WebView / 部分 Chromium 上 getVoices() 首次调用返回空数组，
+ * 语音列表是异步加载的，必须等 voiceschanged 事件。
+ * 不等的话 pickVoice() 会拿到 null，导致 utterance 没有 voice —— 表现就是「不出声」。
+ */
+function ensureVoices(timeoutMs = 3000): Promise<void> {
+  if (!ttsSupported()) return Promise.resolve();
+  if (voices.length) return Promise.resolve();
+  if (voicesReady) return voicesReady;
+
+  voicesReady = new Promise<void>((resolve) => {
+    const synth = window.speechSynthesis;
+    let done = false;
+
+    const finish = () => {
+      if (done) return;
+      done = true;
+      voices = synth.getVoices() || [];
+      synth.removeEventListener?.('voiceschanged', onChange);
+      resolve();
+    };
+
+    const onChange = () => finish();
+
+    // 部分实现用 onvoiceschanged 属性而非事件监听
+    synth.addEventListener?.('voiceschanged', onChange);
+    if (typeof synth.onvoiceschanged !== 'function') {
+      synth.onvoiceschanged = onChange;
+    }
+
+    // 先同步取一次，有的环境这里就有值
+    const immediate = synth.getVoices() || [];
+    if (immediate.length) {
+      voices = immediate;
+      finish();
+      return;
+    }
+
+    // 兜底：超时后无论如何放行，避免永久挂起
+    window.setTimeout(finish, timeoutMs);
+  });
+
+  return voicesReady;
+}
 
 function loadVoices(): SpeechSynthesisVoice[] {
   if (!ttsSupported()) return [];
@@ -48,12 +95,16 @@ export interface SpeakOptions {
 }
 
 /** 朗读一段英文；resolve 表示播完或被合理取消 */
-export function speak(text: string, opts: SpeakOptions = {}): Promise<void> {
+export async function speak(text: string, opts: SpeakOptions = {}): Promise<void> {
+  if (!ttsSupported() || !text.trim()) return;
+
+  // 等语音列表就绪再取 voice，否则 Android WebView 上会没有 voice 而不出声
+  await ensureVoices();
+  return speakNow(text, opts);
+}
+
+function speakNow(text: string, opts: SpeakOptions): Promise<void> {
   return new Promise((resolve) => {
-    if (!ttsSupported() || !text.trim()) {
-      resolve();
-      return;
-    }
     const synth = window.speechSynthesis;
     synth.cancel();
 
@@ -73,13 +124,37 @@ export function speak(text: string, opts: SpeakOptions = {}): Promise<void> {
     u.onstart = () => opts.onStart?.();
     u.onend = done;
     u.onerror = done;
-    synth.speak(u);
+
+    try {
+      synth.speak(u);
+    } catch {
+      done();
+      return;
+    }
 
     // 兜底：某些 WebView 不触发 onend，按字数估算一个上限
     const est = Math.min(20000, 1200 + text.length * 90);
     window.setTimeout(done, est);
   });
 }
+
+/**
+ * 在用户首次手势里调用，解锁 WebView 的音频播放。
+ * Android WebView 要求音频由用户交互触发，否则后续 TTS 会被静默丢弃。
+ */
+export function primeTts(): void {
+  if (!ttsSupported()) return;
+  try {
+    // 静音朗读一个空串，借用户手势把 TTS 通道打开
+    const u = new SpeechSynthesisUtterance(' ');
+    u.volume = 0;
+    window.speechSynthesis.speak(u);
+    void ensureVoices();
+  } catch {
+    /* 忽略：不影响后续正常调用 */
+  }
+}
+
 
 /* ───────────────────────── ASR ───────────────────────── */
 

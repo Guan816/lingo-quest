@@ -92,7 +92,7 @@ jobs:
           } > android/local.properties
           cat android/local.properties
 
-      - name: Allow cleartext HTTP
+      - name: Allow cleartext HTTP & device permissions
         run: |
           # 后端目前是 http（无域名无证书），Android 9+ 默认禁止明文流量，
           # 这里给 WebView 放行，否则 App 内所有 API 请求都会被系统拦截。
@@ -101,6 +101,13 @@ jobs:
             sed -i 's|<application|<application android:usesCleartextTraffic="true"|' "$MANIFEST"
           fi
           grep -o 'android:usesCleartextTraffic="true"' "$MANIFEST" || echo "警告：明文流量未放行"
+
+          # 语音识别需要麦克风权限，Capacitor 生成的工程默认不声明，
+          # 缺了它 listen() 会直接报 permission 错误。
+          if ! grep -q 'RECORD_AUDIO' "$MANIFEST"; then
+            sed -i 's|<uses-permission android:name="android.permission.INTERNET" />|<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />|' "$MANIFEST"
+          fi
+          grep -c 'RECORD_AUDIO' "$MANIFEST" | grep -q '^[1-9]' && echo "麦克风权限已声明" || echo "警告：麦克风权限未声明"
 
       - name: Grant gradlew permission
         run: chmod +x android/gradlew

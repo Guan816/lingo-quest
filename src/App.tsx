@@ -4,6 +4,7 @@ import { TabBar } from './components/TabBar';
 import { TopBar } from './components/TopBar';
 import { RewardToast } from './components/RewardToast';
 import { setSfxEnabled } from './lib/sfx';
+import { primeTts } from './lib/speech';
 import { useSettingsStore } from './store/useSettingsStore';
 import Home from './pages/Home';
 import MapPage from './pages/MapPage';
@@ -43,6 +44,25 @@ function Shell() {
   useEffect(() => {
     setSfxEnabled(sfxEnabled);
   }, [sfxEnabled]);
+
+  // Android WebView 要求音频由用户手势解锁，否则后续 TTS 会被静默丢弃。
+  // 这里挂一次性的首次交互监听，用户第一次点屏幕就把 TTS 通道打开。
+  useEffect(() => {
+    const unlock = () => {
+      primeTts();
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('touchstart', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+    window.addEventListener('pointerdown', unlock, { once: true });
+    window.addEventListener('touchstart', unlock, { once: true });
+    window.addEventListener('keydown', unlock, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('touchstart', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+  }, []);
 
   useEffect(() => {
     (async () => {
