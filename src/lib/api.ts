@@ -1,6 +1,40 @@
 // 漫记前端 API 客户端。base 默认走 vite 代理的 /api（开发）或 VITE_API_BASE（生产）。
 const BASE: string = (import.meta as any).env?.VITE_API_BASE || '/api';
 
+/**
+ * 混合内容拦截检测。
+ *
+ * 安全上下文（https 页面 / Capacitor 的 https://localhost）里，浏览器会
+ * 直接拦掉发往 http:// 的 fetch —— 请求根本不出网，控制台只留一行
+ * Mixed Content 报错，用户侧表现为「点了没反应」。这里主动探测一次，
+ * 让上层能弹出可读的提示，而不是静默失败。
+ */
+let mixedContentWarned = false;
+export function isMixedContentBlocked(): boolean {
+  if (typeof window === 'undefined') return false;
+  if (mixedContentWarned) return true;
+  try {
+    const secure = window.isSecureContext === true;
+    const blocked = secure && /^http:\/\//i.test(BASE);
+    if (blocked) mixedContentWarned = true;
+    return blocked;
+  } catch {
+    return false;
+  }
+}
+
+/** 给低层错误补一句人话，避免用户只看到 "Failed to fetch" */
+function friendly(e: unknown, path: string): Error {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (isMixedContentBlocked()) {
+    return new Error('当前页面是加密访问，而服务器只支持 http，请求被浏览器拦截。请改用 http 地址打开。');
+  }
+  if (/failed to fetch|networkerror|load failed/i.test(msg)) {
+    return new Error(`连不上服务器（${path}），请检查网络后重试`);
+  }
+  return e instanceof Error ? e : new Error(msg);
+}
+
 function getToken(): string | null {
   try {
     const raw = localStorage.getItem('maneji-auth');
@@ -13,13 +47,21 @@ function getToken(): string | null {
 }
 
 async function request(path: string, opts: RequestInit = {}): Promise<any> {
+  if (isMixedContentBlocked()) {
+    throw new Error('当前页面是加密访问，而服务器只支持 http，请求被浏览器拦截。请改用 http 地址打开。');
+  }
   const token = getToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(opts.headers as Record<string, string> | undefined),
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(BASE + path, { ...opts, headers });
+  let res: Response;
+  try {
+    res = await fetch(BASE + path, { ...opts, headers });
+  } catch (e) {
+    throw friendly(e, path);
+  }
   let data: any = {};
   try {
     data = await res.json();

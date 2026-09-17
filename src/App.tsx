@@ -22,6 +22,12 @@ import WechatCallback from './pages/WechatCallback';
 import Cet4 from './pages/Cet4';
 import Cet4Play from './pages/Cet4Play';
 import Cet4Wrong from './pages/Cet4Wrong';
+import MathPage from './pages/MathPage';
+import MathPlay from './pages/MathPlay';
+import CsPage from './pages/CsPage';
+import CsPlay from './pages/CsPlay';
+import UploadPaper from './pages/UploadPaper';
+import FormulaBook from './pages/FormulaBook';
 import { useAuthStore } from './lib/auth';
 import { useProfileStore } from './store/useProfileStore';
 
@@ -30,9 +36,13 @@ const IMMERSIVE = [
   /^\/play\//,
   /^\/games\/(listen|build|shadow|talk)/,
   /^\/cet4\/play\//,
+  /^\/math\/play\//,
+  /^\/cs\/play\//,
   /^\/login$/,
   /^\/leaderboard$/,
   /^\/auth\/wechat\/callback$/,
+  /^\/paper\//,
+  /^\/formulas$/,
 ];
 
 function Shell() {
@@ -102,6 +112,14 @@ function Shell() {
           <Route path="/cet4" element={<Cet4 />} />
           <Route path="/cet4/play/:kind" element={<Cet4Play />} />
           <Route path="/cet4/wrong" element={<Cet4Wrong />} />
+          <Route path="/math" element={<MathPage />} />
+          <Route path="/math/play/:mode" element={<MathPlay />} />
+          <Route path="/math/play/:mode/:value" element={<MathPlay />} />
+          <Route path="/cs" element={<CsPage />} />
+          <Route path="/cs/play/:mode" element={<CsPlay />} />
+          <Route path="/cs/play/:mode/:value" element={<CsPlay />} />
+          <Route path="/paper/:subject" element={<UploadPaper />} />
+          <Route path="/formulas" element={<FormulaBook />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

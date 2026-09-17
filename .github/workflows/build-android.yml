@@ -102,12 +102,40 @@ jobs:
           fi
           grep -o 'android:usesCleartextTraffic="true"' "$MANIFEST" || echo "警告：明文流量未放行"
 
-          # 语音识别需要麦克风权限，Capacitor 生成的工程默认不声明，
-          # 缺了它 listen() 会直接报 permission 错误。
+          # ── 需要声明的权限 ──
+          # RECORD_AUDIO / MODIFY_AUDIO_SETTINGS：语音识别与朗读
+          # READ_EXTERNAL_STORAGE (maxSdkVersion=32)：仅给 Android 12 及以下老设备兜底。
+          #   上传试卷走的是 SAF 系统文件选择器，本身就按文件授权、不需要运行时权限，
+          #   但部分老机型在读取 content:// URI 时仍会查这条声明。
+          # READ_MEDIA_IMAGES：Android 13+ 读图片媒体的对应权限。
+          #
+          # 刻意【不声明】CAMERA：
+          #   我们只通过 <input capture> 让系统相机应用代拍，照片经 URI 回传，
+          #   本应用并不直接调用相机 API，因此不需要 CAMERA。
+          #   反而如果声明了却没在运行时授予，系统会拒绝 ACTION_IMAGE_CAPTURE，
+          #   把拍照功能弄坏。
+          PERMS='<uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />\n    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />'
+
           if ! grep -q 'RECORD_AUDIO' "$MANIFEST"; then
-            sed -i 's|<uses-permission android:name="android.permission.INTERNET" />|<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />|' "$MANIFEST"
+            sed -i "s|<uses-permission android:name=\"android.permission.INTERNET\" />|<uses-permission android:name=\"android.permission.INTERNET\" />\n    $PERMS|" "$MANIFEST"
+          else
+            # 已有录音权限时，只补存储相关那两条（可能来自更早的构建）
+            if ! grep -q 'READ_EXTERNAL_STORAGE' "$MANIFEST"; then
+              sed -i "s|<uses-permission android:name=\"android.permission.RECORD_AUDIO\" />|<uses-permission android:name=\"android.permission.RECORD_AUDIO\" />\n    <uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\" android:maxSdkVersion=\"32\" />\n    <uses-permission android:name=\"android.permission.READ_MEDIA_IMAGES\" />|" "$MANIFEST"
+            fi
           fi
-          grep -c 'RECORD_AUDIO' "$MANIFEST" | grep -q '^[1-9]' && echo "麦克风权限已声明" || echo "警告：麦克风权限未声明"
+
+          echo "--- 权限清单 ---"
+          grep -o '<uses-permission[^/]*/>' "$MANIFEST" || true
+
+          for p in INTERNET RECORD_AUDIO READ_EXTERNAL_STORAGE READ_MEDIA_IMAGES; do
+            if grep -q "$p" "$MANIFEST"; then echo "  $p ✓"; else echo "  $p ✗ 缺失"; fi
+          done
+          if grep -q 'android.permission.CAMERA' "$MANIFEST"; then
+            echo "  警告：声明了 CAMERA，会让 <input capture> 拍照路径失效，建议移除"
+          else
+            echo "  CAMERA 未声明 ✓（符合预期）"
+          fi
 
       - name: Grant gradlew permission
         run: chmod +x android/gradlew

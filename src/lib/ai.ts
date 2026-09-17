@@ -7,9 +7,23 @@ import { formatHits, needsSearch, webSearch } from './search';
  * 只要是对话补全协议都能直接填 BaseURL 使用。
  */
 
+/** 多模态消息内容：给视觉模型看图片时用 */
+export type ContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
+
 export interface ChatTurn {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: string | ContentPart[];
+}
+
+/** 取出消息里的纯文本部分（数组形式时把 text 片段拼起来） */
+export function textOf(content: string | ContentPart[]): string {
+  if (typeof content === 'string') return content;
+  return content
+    .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+    .map((p) => p.text)
+    .join('\n');
 }
 
 export const DEFAULT_AI_CONFIG: AIConfig = {
@@ -142,7 +156,8 @@ export async function chatCompleteWithSearch(
     onSearch?: (hits: number) => void;
   } = {},
 ): Promise<string> {
-  const lastUser = [...turns].reverse().find((t) => t.role === 'user')?.content ?? '';
+  const lastTurn = [...turns].reverse().find((t) => t.role === 'user');
+  const lastUser = lastTurn ? textOf(lastTurn.content) : '';
 
   if (!cfg.webSearch) {
     return chatComplete(cfg, turns, opts);

@@ -5,7 +5,7 @@
  * 会答不上来或者编。这里先搜一遍网页，把结果塞进 system prompt 再让模型组织语言。
  *
  * 搜索后端用 SearXNG（开源自建、无 API Key、聚合多引擎结果）。
- * 填自建实例地址即可；不填则用默认实例。
+ * 默认指向本项目自建的实例；用户也可以在设置里换成自己的。
  */
 
 export interface SearchHit {
@@ -21,14 +21,28 @@ export interface SearchResult {
   error?: string;
 }
 
-/** 默认搜索实例（用户可在设置里改成自己的自建实例） */
-export const DEFAULT_SEARCH_BASE = 'https://searx.be';
+/**
+ * 默认搜索实例。
+ *
+ * 公共 SearXNG 实例基本都关掉了 JSON 输出（防止被滥用），实测 searx.be 等
+ * 已经无法作为数据源。所以这里指向本项目在服务器上自建的实例，
+ * 并通过 Caddy 的 /search 路径反代出去（同域名，天然无跨域问题）。
+ */
+export const DEFAULT_SEARCH_BASE = '';
 
 /** 单次搜索超时。搜索是「锦上添花」，不能拖垮对话 */
 const SEARCH_TIMEOUT_MS = 8000;
 
+/**
+ * 搜索后端地址。
+ * - 生产环境：前端与 Caddy 同源，/search 会被反代到自建 SearXNG，所以留空即可
+ * - 开发环境：vite 代理里配了 /search 转发，同样留空可用
+ * - 用户自定义：填完整地址（带不带 /search 都行）
+ */
 function endpoint(base: string): string {
-  const b = (base || DEFAULT_SEARCH_BASE).trim().replace(/\/+$/, '');
+  const b = (base || '').trim().replace(/\/+$/, '');
+  if (!b) return '/search'; // 同源相对路径
+  if (b.endsWith('/search')) return b;
   return `${b}/search`;
 }
 

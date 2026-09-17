@@ -44,3 +44,8 @@ dist-node-tmp/
 # 否则会连 src/data/ 一起误伤（cet4 题库就因为这条规则漏提交过）。
 /data/
 .env
+
+# 构建产物：APK 走 CI artifact / Release，不进仓库
+/release/
+android/
+*.apk

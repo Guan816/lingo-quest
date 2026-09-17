@@ -1,12 +1,12 @@
-import { BarChart3, Gamepad2, GraduationCap, Home, Map as MapIcon } from 'lucide-react';
+import { BarChart3, Cpu, GraduationCap, Home, Sigma } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import clsx from 'clsx';
 
 const TABS = [
   { to: '/', label: '首页', icon: Home },
-  { to: '/map', label: '闯关', icon: MapIcon },
-  { to: '/cet4', label: '四级', icon: GraduationCap },
-  { to: '/games', label: '玩法', icon: Gamepad2 },
+  { to: '/cet4', label: '英语', icon: GraduationCap },
+  { to: '/math', label: '数学', icon: Sigma },
+  { to: '/cs', label: '计算机', icon: Cpu },
   { to: '/stats', label: '我的', icon: BarChart3 },
 ];
 

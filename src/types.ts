@@ -197,3 +197,127 @@ export interface Cet4Writing {
   phrases?: { en: string; zh: string }[];
   tag?: string;
 }
+
+/* ============================================================
+ *  江苏专转本 · 数学（高等数学 + 线性代数）
+ *  官方构成：微积分 80% + 线性代数 20%，满分 150 / 120 分钟
+ *  题型：单选 8×4=32 · 填空 6×4=24 · 计算 8×8=64 · 证明 1×10=10 · 综合 2×10=20
+ * ============================================================ */
+
+/** 数学题型（对齐官方卷面） */
+export type MathKind =
+  | 'choice' // 单项选择题
+  | 'blank' // 填空题（客观判分）
+  | 'calc' // 计算题（主观作答，对照答案）
+  | 'proof' // 证明题
+  | 'synthetic'; // 综合题
+
+/**
+ * 数学考点所属章节。
+ *
+ * 严格对齐《江苏省普通高校"专转本"选拔考试 高等数学考试大纲》
+ * （省教育厅，2022 年起实施）的考查内容顺序：
+ *   第一部分 微积分：(一)函数极限连续 (二)一元函数微分学 (三)一元函数积分学
+ *                     (四)多元函数微积分学 (五)无穷级数 (六)常微分方程
+ *   第二部分 线性代数：(一)行列式与矩阵 (二)向量与线性方程组
+ *
+ * 注意：考纲**不含**「向量代数与空间解析几何」。其中的「向量」指
+ * n 维向量（属线性代数），不是空间几何向量。
+ */
+export type MathChapter =
+  // ── 第一部分 微积分（约 80%）──
+  | 'limit' // (一) 函数、极限与连续
+  | 'deriv' // (二) 一元函数微分学
+  | 'integral' // (三) 一元函数积分学
+  | 'multivar' // (四) 多元函数微积分学
+  | 'series' // (五) 无穷级数
+  | 'ode' // (六) 常微分方程
+  // ── 第二部分 线性代数（约 20%）──
+  | 'detmat' // (一) 行列式与矩阵
+  | 'linalg'; // (二) 向量与线性方程组
+
+/** 难度层级（对齐官方「较易 30% / 中等 50% / 较难 20%」） */
+export type Difficulty = 'easy' | 'mid' | 'hard';
+
+/** 一道数学题 */
+export interface MathQuestion {
+  id: string;
+  chapter: MathChapter;
+  kind: MathKind;
+  difficulty: Difficulty;
+  /** 题干 */
+  stem: string;
+  /** 选择题选项；非选择题为空 */
+  options?: string[];
+  /** 选择题正确项下标 */
+  answer?: number;
+  /** 参考答案（填空题给答案文本，计算/证明给解题过程要点） */
+  refAnswer: string;
+  /** 分步解析 */
+  steps: string[];
+  /** 一句话考点 */
+  point: string;
+  /** 公式提示（可选） */
+  formula?: string;
+  tag?: string;
+}
+
+/* ============================================================
+ *  江苏专转本 · 计算机
+ *  课程 A：计算机应用基础（约 60%）
+ *  课程 B：信息技术导论（约 40%）
+ *  题型：判断 10×1 · 单选 50×2 · 多选 10×2 · 填空 10×2
+ * ============================================================ */
+
+/** 计算机试卷课程 */
+export type CsCourse = 'A' | 'B';
+
+/** 计算机题型 */
+export type CsKind =
+  | 'judge' // 判断题
+  | 'single' // 单选题
+  | 'multi' // 多选题
+  | 'fill'; // 填空题
+
+/** 课程 A 章节（计算机应用基础） */
+export type CsChapterA =
+  | 'hardware' // 计算机硬件
+  | 'software' // 计算机软件
+  | 'network' // 计算机网络与互联网
+  | 'media'; // 多媒体技术
+
+/** 课程 B 章节（信息技术导论） */
+export type CsChapterB =
+  | 'infosys' // 信息和信息系统
+  | 'iot' // 物联网技术
+  | 'mobile' // 移动互联网技术
+  | 'cloud' // 云计算技术
+  | 'bigdata' // 大数据技术
+  | 'ai' // 人工智能技术
+  | 'blockchain'; // 区块链
+
+export type CsChapter = CsChapterA | CsChapterB;
+
+/** 一道计算机题 */
+export interface CsQuestion {
+  id: string;
+  course: CsCourse;
+  chapter: CsChapter;
+  kind: CsKind;
+  difficulty: Difficulty;
+  stem: string;
+  /** 单选 / 多选 的选项；判断题不必填（前端固定「正确/错误」）；填空无选项 */
+  options?: string[];
+  /**
+   * 单选：正确项下标；多选：正确项下标数组；判断题：1=正确 0=错误。
+   * 填空题是主观作答（对照 refAnswer 自评），所以可不填。
+   */
+  answer?: number | number[];
+  /** 填空题的参考答案 */
+  refAnswer?: string;
+  /** 解析 */
+  explain: string;
+  point: string;
+  tag?: string;
+}
+
