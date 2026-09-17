@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { CheckCircle2, Eye, EyeOff, Loader2, RotateCcw, ShieldCheck } from 'lucide-react';
 import { AI_PRESETS, testConnection } from '../lib/ai';
+import { webSearch } from '../lib/search';
 import { asrSupported, ttsSupported } from '../lib/speech';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useProfileStore } from '../store/useProfileStore';
@@ -17,6 +18,8 @@ export default function Settings() {
   const [showKey, setShowKey] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [searchTesting, setSearchTesting] = useState(false);
+  const [searchMsg, setSearchMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const runTest = async () => {
     setTesting(true);
@@ -24,6 +27,21 @@ export default function Settings() {
     const r = await testConnection(ai);
     setTestMsg({ ok: r.ok, text: r.message });
     setTesting(false);
+  };
+
+  const runSearchTest = async () => {
+    setSearchTesting(true);
+    setSearchMsg(null);
+    const r = await webSearch('今天的新闻', { baseUrl: ai.searchBaseUrl, limit: 3 });
+    if (r.ok) {
+      setSearchMsg({
+        ok: r.hits.length > 0,
+        text: r.hits.length ? `搜到 ${r.hits.length} 条：${r.hits[0].title.slice(0, 30)}` : '连通，但没返回结果',
+      });
+    } else {
+      setSearchMsg({ ok: false, text: r.error ?? '搜索失败' });
+    }
+    setSearchTesting(false);
   };
 
   return (
@@ -101,6 +119,52 @@ export default function Settings() {
                   className="w-full rounded-2xl border-2 border-ink/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-brand-400"
                 />
               </Field>
+
+              {/* 联网搜索：让模型能查实时信息 */}
+              <div className="space-y-3 rounded-2xl bg-ink/[0.03] p-3">
+                <Toggle
+                  label="接入联网搜索"
+                  desc="问到新闻、比分、价格这类实时信息时先联网查一遍，再让 AI 组织回答。"
+                  checked={!!ai.webSearch}
+                  onChange={(v) => setAi({ webSearch: v })}
+                />
+
+                {ai.webSearch && (
+                  <>
+                    <Field label="搜索服务地址（选填）">
+                      <input
+                        value={ai.searchBaseUrl ?? ''}
+                        onChange={(e) => setAi({ searchBaseUrl: e.target.value })}
+                        placeholder="留空用默认 SearXNG 实例"
+                        className="w-full rounded-2xl border-2 border-ink/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-brand-400"
+                      />
+                    </Field>
+
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" variant="outline" onClick={runSearchTest} disabled={searchTesting}>
+                        {searchTesting ? <Loader2 size={14} className="animate-spin" /> : null}
+                        测试搜索
+                      </Button>
+                      {searchMsg && (
+                        <span
+                          className={`flex-1 truncate text-xs font-bold ${
+                            searchMsg.ok ? 'text-mint-600' : 'text-coral-600'
+                          }`}
+                        >
+                          {searchMsg.ok ? '✅ ' : '❌ '}
+                          {searchMsg.text}
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="text-[11px] leading-relaxed text-ink-faint">
+                      搜索走的是 <span className="font-black">SearXNG</span>（开源元搜索引擎，无需 API Key）。
+                      默认实例在国内可能较慢，建议自建：服务器上一条 Docker 命令即可，
+                      然后把地址填进来。
+                    </p>
+                  </>
+                )}
+              </div>
 
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="mint" onClick={runTest} disabled={testing}>

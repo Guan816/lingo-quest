@@ -125,6 +125,10 @@ export interface AIConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
+  /** 接入联网搜索：让模型能查实时信息（新闻、赛事、新词等） */
+  webSearch?: boolean;
+  /** 搜索服务地址，留空用默认的 SearXNG 实例 */
+  searchBaseUrl?: string;
 }
 
 /** 聊天消息（Boss 对话与自由聊共用） */

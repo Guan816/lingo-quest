@@ -1,4 +1,5 @@
 import type { AIConfig } from '../types';
+import { formatHits, needsSearch, webSearch } from './search';
 
 /**
  * OpenAI 兼容聊天接口客户端。
@@ -16,6 +17,8 @@ export const DEFAULT_AI_CONFIG: AIConfig = {
   baseUrl: 'https://api.openai.com/v1',
   apiKey: '',
   model: 'gpt-4o-mini',
+  webSearch: false,
+  searchBaseUrl: '',
 };
 
 /** 各家常见配置，设置页一键填入 */
@@ -120,7 +123,60 @@ export async function chatComplete(
   }
 }
 
-/** 设置页的「测试连接」 */
+/**
+ * 带联网搜索的对话。
+ *
+ * 流程：先判断这句话是否需要实时信息 → 需要就搜一次 → 把结果拼进 system prompt
+ * → 再交给模型组织语言。搜索失败不影响对话，只是退化成纯模型回答。
+ */
+export async function chatCompleteWithSearch(
+  cfg: AIConfig,
+  turns: ChatTurn[],
+  opts: {
+    maxTokens?: number;
+    temperature?: number;
+    timeoutMs?: number;
+    /** 强制搜索（用户手动点「联网查」时用） */
+    forceSearch?: boolean;
+    /** 搜索完成回调，便于界面展示「正在查资料」 */
+    onSearch?: (hits: number) => void;
+  } = {},
+): Promise<string> {
+  const lastUser = [...turns].reverse().find((t) => t.role === 'user')?.content ?? '';
+
+  if (!cfg.webSearch) {
+    return chatComplete(cfg, turns, opts);
+  }
+
+  const shouldSearch = opts.forceSearch || needsSearch(lastUser);
+  let searchBlock = '';
+
+  if (shouldSearch) {
+    const r = await webSearch(lastUser, { baseUrl: cfg.searchBaseUrl, limit: 4 });
+    opts.onSearch?.(r.hits.length);
+    if (r.ok && r.hits.length) {
+      searchBlock = formatHits(r.hits);
+    }
+  }
+
+  if (!searchBlock) {
+    // 没搜到就正常回答，额外告诉模型「别硬编实时信息」
+    return chatComplete(cfg, turns, opts);
+  }
+
+  const sys: ChatTurn = {
+    role: 'system',
+    content:
+      '你能看到下面这些刚搜到的网页片段。请优先依据它们回答，' +
+      '并用自然口语作答；如果片段里没有相关信息，就直说不知道，不要编造。\n\n' +
+      '【联网搜索结果】\n' +
+      searchBlock,
+  };
+
+  // 插在最前面，避免影响原有的角色设定（如果有的话）
+  return chatComplete(cfg, [sys, ...turns], opts);
+}
+
 export async function testConnection(cfg: AIConfig): Promise<{ ok: boolean; message: string }> {
   try {
     const reply = await chatComplete(

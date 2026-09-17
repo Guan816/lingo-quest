@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Flag } from 'lucide-react';
+import { ArrowLeft, Flag, Globe } from 'lucide-react';
 import type { ChatMessage } from '../../types';
 import { SCENARIOS } from '../../data/scenarios';
 import { speak } from '../../lib/speech';
 import { offlineReply } from '../../lib/offlineEngine';
-import { chatComplete } from '../../lib/ai';
+import { chatCompleteWithSearch } from '../../lib/ai';
 import { starsForScore } from '../../lib/scoring';
 import { uid } from '../../lib/utils';
 import { useSettingsStore } from '../../store/useSettingsStore';
@@ -83,6 +83,7 @@ function ChatView({
   ]);
   const [turn, setTurn] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [searching, setSearching] = useState(false);
   const [done, setDone] = useState(false);
   const scoresRef = useRef<number[]>([]);
   const online = ai.enabled && Boolean(ai.apiKey);
@@ -92,7 +93,7 @@ function ChatView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const reply = async (userText: string, t: number) => {
+  const reply = async (userText: string, t: number, forceSearch = false) => {
     setBusy(true);
     let out: { en: string; zh?: string };
     if (online) {
@@ -102,14 +103,26 @@ function ChatView({
       }));
       try {
         out = {
-          en: await chatComplete(ai, [
-            { role: 'system', content: char.systemPrompt },
-            ...history,
-            { role: 'user', content: userText || '(the user said nothing)' },
-          ]),
+          // 开了联网搜索时，模型会先查一遍实时信息再回答
+          en: await chatCompleteWithSearch(
+            ai,
+            [
+              { role: 'system', content: char.systemPrompt },
+              ...history,
+              { role: 'user', content: userText || '(the user said nothing)' },
+            ],
+            {
+              forceSearch,
+              onSearch: (n) => {
+                setSearching(n === 0);
+              },
+            },
+          ),
         };
       } catch {
         out = offlineReply(userText, t);
+      } finally {
+        setSearching(false);
       }
     } else {
       out = offlineReply(userText, t);
@@ -153,7 +166,14 @@ function ChatView({
             {char.emoji} {char.name}
           </p>
           <p className="truncate text-[11px] text-ink-faint">
-            {online ? 'AI 自由对话' : '离线引擎'} · 已聊 {turn} 轮
+            {searching
+              ? '正在联网查资料…'
+              : online
+                ? ai.webSearch
+                  ? 'AI 对话 · 联网已开'
+                  : 'AI 自由对话'
+                : '离线引擎'}{' '}
+            · 已聊 {turn} 轮
           </p>
         </div>
         <button
@@ -195,8 +215,23 @@ function ChatView({
         {busy && (
           <p className="pl-11 text-xs font-bold text-ink-faint">
             <span className="mr-1 inline-block h-2 w-2 animate-ping rounded-full bg-mint-500" />
-            {char.name} 正在思考…
+            {searching ? '正在联网查资料…' : `${char.name} 正在思考…`}
           </p>
+        )}
+
+        {/* 手动触发联网查询：自动判断有时会漏，给用户一个确定性入口 */}
+        {online && ai.webSearch && !busy && (
+          <div className="flex justify-center pt-1">
+            <button
+              onClick={() => {
+                const last = [...msgs].reverse().find((m) => m.role === 'user');
+                void reply(last?.en ?? '', turn + 1, true);
+              }}
+              className="flex items-center gap-1.5 rounded-full bg-brand-50 px-3.5 py-1.5 text-xs font-black text-brand-600 btn-pop"
+            >
+              <Globe size={13} strokeWidth={3} /> 联网查一下
+            </button>
+          </div>
         )}
       </div>
 
