@@ -137,6 +137,17 @@ jobs:
             echo "  CAMERA 未声明 ✓（符合预期）"
           fi
 
+          # ── 声明系统语音服务的查询 ──
+          # Android 11+ 的包可见性限制：不声明 <queries>，应用就「看不见」
+          # 系统的 TTS 引擎和识别服务，表现为朗读没声、识别说不可用。
+          # 原生语音插件需要这两条。
+          if ! grep -q 'TTS_SERVICE' "$MANIFEST"; then
+            sed -i 's|</manifest>|    <queries>\n        <intent>\n            <action android:name="android.intent.action.TTS_SERVICE" />\n        </intent>\n        <intent>\n            <action android:name="android.speech.RecognitionService" />\n        </intent>\n    </queries>\n</manifest>|' "$MANIFEST"
+          fi
+          for q in TTS_SERVICE RecognitionService; do
+            if grep -q "$q" "$MANIFEST"; then echo "  queries/$q ✓"; else echo "  queries/$q ✗ 缺失"; fi
+          done
+
       - name: Grant gradlew permission
         run: chmod +x android/gradlew
 

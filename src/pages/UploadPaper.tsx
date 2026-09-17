@@ -15,6 +15,7 @@ import {
   Wand2,
 } from 'lucide-react';
 import { Card, Chip, SectionTitle } from '../components/ui';
+import { MathText } from '../components/MathText';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useFormulaBookStore } from '../store/useFormulaBookStore';
 import { checkUploadable, formatSize, prepareFileAccess } from '../lib/permissions';
@@ -52,6 +53,30 @@ export default function UploadPaper() {
   const [step, setStep] = useState('');
   const [err, setErr] = useState('');
   const [fileName, setFileName] = useState('');
+  /** 已触发文件选择器 —— 用来区分「点了没反应」和「选择器没弹出」 */
+  const [picking, setPicking] = useState<'file' | 'camera' | null>(null);
+
+  /**
+   * 打开文件选择器。
+   *
+   * 这里会先给出「已触发」的即时反馈：如果用户在手机上看到提示
+   * 但系统选择器没弹出来，就能确定是 WebView/系统的限制，
+   * 而不是按钮没响应 —— 这两种情况以前分不清。
+   */
+  const openPicker = (kind: 'file' | 'camera') => {
+    setErr('');
+    setPicking(kind);
+    const el = kind === 'file' ? fileRef.current : camRef.current;
+    try {
+      el?.click();
+    } catch {
+      setPicking(null);
+      setErr('这一步打不开文件选择器，换个方式试试（比如先截图再选图片）。');
+      return;
+    }
+    // onChange 会把它关掉；用户取消选择时兜底收起
+    window.setTimeout(() => setPicking((p) => (p === kind ? null : p)), 4000);
+  };
   const [analysis, setAnalysis] = useState<PaperAnalysis | null>(null);
   const [savedCount, setSavedCount] = useState(0);
   const [items, setItems] = useState<QuizItem[]>([]);
@@ -62,7 +87,8 @@ export default function UploadPaper() {
 
   /** 处理选中的文件 */
   const handleFile = async (file: File | undefined | null) => {
-    if (!file) return;
+    setPicking(null);
+    if (!file) return; // 用户取消了选择，静默返回
     setErr('');
 
     const chk = checkUploadable(file);
@@ -70,12 +96,19 @@ export default function UploadPaper() {
       setErr(chk.message ?? '文件不可用');
       return;
     }
+
+    setFileName(`${file.name}（${formatSize(file.size)}）`);
+
+    // 文件已经拿到手了，只是缺 AI 配置。
+    // 这时候要说清楚「文件没问题、缺的是什么」，而不是让用户以为上传坏了。
     if (!aiReady) {
-      setErr('还没有配置 AI 接口。解析试卷需要模型能力，请先到「我的 → AI 接口设置」填好地址和 Key。');
+      setErr(
+        '文件已经选好了，但试卷解析要靠大模型，需要先配置 AI 接口。'
+        + '点下面的「去配置」填好地址和 Key，再回来重新选一次就能用。',
+      );
       return;
     }
 
-    setFileName(`${file.name}（${formatSize(file.size)}）`);
     setStage('working');
 
     try {
@@ -215,11 +248,16 @@ export default function UploadPaper() {
           <section className="space-y-2">
             <SectionTitle>选择试卷</SectionTitle>
 
+            {/*
+              注意：这两个 input 不能用 className="hidden"（display:none）。
+              部分 Android WebView 对 display:none 的 file input 不弹选择器，
+              用 sr-only（视觉隐藏但仍在渲染树里）兼容性更好。
+            */}
             <input
               ref={fileRef}
               type="file"
               accept=".pdf,image/*,text/plain,.txt,.md"
-              className="hidden"
+              className="sr-only"
               onChange={(e) => {
                 const f = e.target.files?.[0];
                 e.target.value = ''; // 允许再次选同一个文件
@@ -231,7 +269,7 @@ export default function UploadPaper() {
               type="file"
               accept="image/*"
               capture="environment"
-              className="hidden"
+              className="sr-only"
               onChange={(e) => {
                 const f = e.target.files?.[0];
                 e.target.value = '';
@@ -239,10 +277,14 @@ export default function UploadPaper() {
               }}
             />
 
+            {/*
+              按钮**不能**在没配 AI 时禁用 —— 那样点了毫无反应，
+              用户只会觉得「坏了」。让它照常打开选择器，
+              选完文件后再给出「先去配置」的明确指引。
+            */}
             <button
-              onClick={() => fileRef.current?.click()}
-              disabled={!aiReady}
-              className="flex w-full flex-col items-center gap-2 rounded-3xl border-2 border-dashed border-brand-300 bg-brand-50/60 px-5 py-9 text-center transition-colors active:bg-brand-100 disabled:opacity-50"
+              onClick={() => openPicker('file')}
+              className="flex w-full flex-col items-center gap-2 rounded-3xl border-2 border-dashed border-brand-300 bg-brand-50/60 px-5 py-9 text-center transition-colors active:bg-brand-100"
             >
               <span className="grid h-14 w-14 place-items-center rounded-2xl bg-brand-500 text-white shadow-pop">
                 <Upload size={24} strokeWidth={2.6} />
@@ -253,11 +295,18 @@ export default function UploadPaper() {
               </span>
             </button>
 
+            {picking && (
+              <div className="rounded-2xl bg-sun-50 px-3.5 py-2.5 text-[11px] leading-relaxed text-sun-700">
+                已触发系统{picking === 'file' ? '文件选择' : '相机'}。
+                如果等了 2 秒还没弹出来，说明系统没响应这次调用 ——
+                可以换个方式：先在相册里截图/拍照，再回这里点「选择文件」从图库挑。
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-2">
               <button
-                onClick={() => camRef.current?.click()}
-                disabled={!aiReady}
-                className="flex items-center justify-center gap-2 rounded-2xl border-2 border-ink/8 bg-white py-3.5 text-[13px] font-black text-ink active:border-brand-300 disabled:opacity-50"
+                onClick={() => openPicker('camera')}
+                className="flex items-center justify-center gap-2 rounded-2xl border-2 border-ink/8 bg-white py-3.5 text-[13px] font-black text-ink active:border-brand-300"
               >
                 <Camera size={17} className="text-brand-500" strokeWidth={2.6} />
                 拍照上传
@@ -344,10 +393,12 @@ export default function UploadPaper() {
                 {analysis.formulas.map((f, i) => (
                   <div key={i} className="card p-3.5">
                     <p className="font-mono text-[13px] font-bold leading-relaxed text-ink">
-                      {f.text}
+                      <MathText>{f.text}</MathText>
                     </p>
                     {f.note && (
-                      <p className="mt-1 text-[11px] leading-relaxed text-ink-faint">{f.note}</p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-ink-faint">
+                        <MathText>{f.note}</MathText>
+                      </p>
                     )}
                   </div>
                 ))}
@@ -368,9 +419,13 @@ export default function UploadPaper() {
                       strokeWidth={2.6}
                     />
                     <div className="min-w-0 flex-1">
-                      <p className="text-[13px] font-bold leading-relaxed text-ink">{t.text}</p>
+                      <p className="text-[13px] font-bold leading-relaxed text-ink">
+                        <MathText>{t.text}</MathText>
+                      </p>
                       {t.note && (
-                        <p className="mt-1 text-[11px] leading-relaxed text-ink-faint">{t.note}</p>
+                        <p className="mt-1 text-[11px] leading-relaxed text-ink-faint">
+                          <MathText>{t.note}</MathText>
+                        </p>
                       )}
                     </div>
                   </div>

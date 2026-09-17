@@ -1,13 +1,15 @@
 import type { ReactNode } from 'react';
-import { useState } from 'react';
-import { CheckCircle2, Eye, EyeOff, Loader2, RotateCcw, ShieldCheck } from 'lucide-react';
-import { AI_PRESETS, testConnection } from '../lib/ai';
+import { useEffect, useMemo, useState } from 'react';
+import { CheckCircle2, Loader2, RotateCcw } from 'lucide-react';
+import { testConnection } from '../lib/ai';
+import { api } from '../lib/api';
 import { webSearch } from '../lib/search';
-import { asrSupported, ttsSupported } from '../lib/speech';
+import { asrSupported, speechDiagnostics, testSpeak, ttsSupported } from '../lib/speech';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useProfileStore } from '../store/useProfileStore';
 import { markGranted, requestPermission } from '../lib/permissionGate';
 import { Button, Chip, SectionTitle } from '../components/ui';
+import clsx from 'clsx';
 
 export default function Settings() {
   const ai = useSettingsStore((s) => s.ai);
@@ -16,19 +18,49 @@ export default function Settings() {
   const dailyGoal = useProfileStore((s) => s.dailyGoal);
   const setDailyGoal = useProfileStore((s) => s.setDailyGoal);
 
-  const [showKey, setShowKey] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  /** 服务端 AI 状态摘要（有哪些服务商、还剩多少额度） */
+  const [aiStatus, setAiStatus] = useState<string>('');
   const [searchTesting, setSearchTesting] = useState(false);
   const [searchMsg, setSearchMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [micMsg, setMicMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [speaking, setSpeaking] = useState(false);
+  const [speakMsg, setSpeakMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  /** 语音能力自检结果：区分原生 / 浏览器，排查「没声音」时最关键的信息 */
+  const diag = useMemo(() => speechDiagnostics(), []);
 
-  const runTest = async () => {
+  /** 拉取服务端的 AI 服务商与剩余额度，展示给用户看 */
+  const loadAiStatus = async () => {
+    try {
+      const r = await api.aiStatus();
+      if (!r?.enabled) {
+        setAiStatus('⚠️ 服务端还没有配置 AI 服务');
+        return;
+      }
+      const names: string[] = (r.providers || []).map(
+        (p: { name: string }) => p.name,
+      );
+      setAiStatus(`可用服务：${names.join(' / ')} · 今日剩余额度 ${r.quotaLeft ?? '-'} 次`);
+    } catch {
+      setAiStatus('暂时取不到服务状态（不影响使用）');
+    }
+  };
+
+  useEffect(() => {
+    void loadAiStatus();
+  }, []);
+
+  const runAiTest = async () => {
     setTesting(true);
     setTestMsg(null);
     const r = await testConnection(ai);
-    setTestMsg({ ok: r.ok, text: r.message });
+    setTestMsg({
+      ok: r.ok,
+      text: r.provider ? `${r.message}（${r.provider}）` : r.message,
+    });
     setTesting(false);
+    void loadAiStatus();
   };
 
   const runSearchTest = async () => {
@@ -69,58 +101,40 @@ export default function Settings() {
 
           {ai.enabled && (
             <>
-              <div>
-                <p className="mb-2 text-xs font-black text-ink-faint">快速填入服务商</p>
-                <div className="flex flex-wrap gap-2">
-                  {AI_PRESETS.map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => setAi({ baseUrl: p.baseUrl, model: p.model })}
-                      className="rounded-full bg-ink/5 px-3 py-1.5 text-xs font-black text-ink-soft btn-pop"
-                      title={p.hint}
-                    >
-                      {p.name}
-                    </button>
-                  ))}
-                </div>
+              {/*
+                AI 由服务端统一提供：Key 在服务器上，模型也由服务器挑。
+                所以这里**不再有** BaseURL / API Key / 模型名这些输入框 ——
+                普通用户不需要（也不应该）碰这些东西。
+              */}
+              <div className="rounded-2xl bg-mint-50 px-3.5 py-3">
+                <p className="text-[12px] font-black text-mint-700">AI 已开箱可用，不用填任何配置</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-mint-700/85">
+                  服务端已经接好了模型（优先用有免费额度的），
+                  BOSS 战、自由对话、试卷解析都能直接用，不需要你自己申请 Key。
+                </p>
+                {aiStatus && (
+                  <p className="mt-1.5 text-[11px] font-bold text-mint-700/80">{aiStatus}</p>
+                )}
               </div>
 
-              <Field label="Base URL">
-                <input
-                  value={ai.baseUrl}
-                  onChange={(e) => setAi({ baseUrl: e.target.value })}
-                  placeholder="https://api.openai.com/v1"
-                  className="w-full rounded-2xl border-2 border-ink/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-brand-400"
-                />
-              </Field>
-
-              <Field label="API Key">
-                <div className="relative">
-                  <input
-                    type={showKey ? 'text' : 'password'}
-                    value={ai.apiKey}
-                    onChange={(e) => setAi({ apiKey: e.target.value })}
-                    placeholder="sk-..."
-                    className="w-full rounded-2xl border-2 border-ink/10 bg-white px-3 py-2.5 pr-10 text-sm text-ink outline-none focus:border-brand-400"
-                  />
-                  <button
-                    onClick={() => setShowKey((v) => !v)}
-                    aria-label="显示/隐藏密钥"
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-faint"
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={runAiTest} disabled={testing}>
+                  {testing ? <Loader2 size={14} className="animate-spin" /> : null}
+                  测试 AI
+                </Button>
+                {testMsg && (
+                  <span
+                    className={clsx(
+                      "flex-1 text-xs font-bold",
+                      testMsg.ok ? "text-mint-600" : "text-coral-600",
+                    )}
                   >
-                    {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-              </Field>
+                    {testMsg.ok ? "✅ " : "❌ "}
+                    {testMsg.text}
+                  </span>
+                )}
+              </div>
 
-              <Field label="模型名称">
-                <input
-                  value={ai.model}
-                  onChange={(e) => setAi({ model: e.target.value })}
-                  placeholder="gpt-4o-mini"
-                  className="w-full rounded-2xl border-2 border-ink/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-brand-400"
-                />
-              </Field>
 
               {/* 联网搜索：让模型能查实时信息 */}
               <div className="space-y-3 rounded-2xl bg-ink/[0.03] p-3">
@@ -168,31 +182,7 @@ export default function Settings() {
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="mint" onClick={runTest} disabled={testing}>
-                  {testing ? <Loader2 size={14} className="animate-spin" /> : null}
-                  测试连接
-                </Button>
-                {testMsg && (
-                  <span
-                    className={`flex-1 truncate text-xs font-bold ${
-                      testMsg.ok ? 'text-mint-600' : 'text-coral-600'
-                    }`}
-                  >
-                    {testMsg.ok ? '✅ ' : '❌ '}
-                    {testMsg.text}
-                  </span>
-                )}
-              </div>
-
-              <div className="flex items-start gap-2 rounded-2xl bg-brand-50 p-3">
-                <ShieldCheck size={16} strokeWidth={2.6} className="mt-0.5 shrink-0 text-brand-600" />
-                <p className="text-[11px] leading-relaxed text-brand-700">
-                  Key 只保存在你这台设备的本地存储里，不会上传到任何第三方服务器，
-                  也不会被提交到 GitHub。请求由你的 App 直接发给你填的服务商。
-                </p>
-              </div>
-            </>
+                          </>
           )}
         </div>
       </section>
@@ -269,24 +259,71 @@ export default function Settings() {
       <section>
         <SectionTitle>当前设备</SectionTitle>
         <div className="card space-y-2 p-4 text-xs text-ink-soft">
+          {/* 运行环境：用来区分「原生 App」和「浏览器」，
+              两者的语音实现完全不同，排查问题时这一行最关键 */}
+          <div className="flex items-center justify-between">
+            <span>运行环境</span>
+            <Chip tone={diag.platform === '原生 App' ? 'grape' : 'gray'}>
+              {diag.platform}
+            </Chip>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <span>语音朗读（示范）</span>
+            {ttsSupported() ? (
+              <Chip tone="mint">
+                <CheckCircle2 size={12} strokeWidth={3} /> {diag.tts}
+              </Chip>
+            ) : (
+              <Chip tone="sun">不可用</Chip>
+            )}
+          </div>
+
           <div className="flex items-center justify-between">
             <span>语音识别（打分）</span>
             {asrSupported() ? (
               <Chip tone="mint">
-                <CheckCircle2 size={12} strokeWidth={3} /> 可用
+                <CheckCircle2 size={12} strokeWidth={3} /> {diag.asr}
               </Chip>
             ) : (
               <Chip tone="sun">不可用 · 走打字模式</Chip>
             )}
           </div>
-          <div className="flex items-center justify-between">
-            <span>语音朗读（示范）</span>
-            {ttsSupported() ? (
-              <Chip tone="mint">
-                <CheckCircle2 size={12} strokeWidth={3} /> 可用
-              </Chip>
-            ) : (
-              <Chip tone="sun">不可用</Chip>
+
+          {/* 朗读实测：点了能出声才算真可用。
+              系统没装 TTS 引擎或没装英文语音包时会失败，这里会如实报出来。 */}
+          <div className="border-t border-ink/8 pt-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-[12px] font-black text-ink">朗读实测</p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-ink-faint">
+                  点一下听示范句。没声音就说明系统缺语音引擎或英文语音包。
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={speaking}
+                onClick={async () => {
+                  setSpeakMsg(null);
+                  setSpeaking(true);
+                  const r = await testSpeak();
+                  setSpeaking(false);
+                  setSpeakMsg(r);
+                }}
+              >
+                {speaking ? '播放中…' : '试听'}
+              </Button>
+            </div>
+            {speakMsg && (
+              <p
+                className={`mt-1.5 text-[11px] leading-relaxed font-bold ${
+                  speakMsg.ok ? 'text-mint-600' : 'text-coral-600'
+                }`}
+              >
+                {speakMsg.ok ? '✅ ' : '❌ '}
+                {speakMsg.text}
+              </p>
             )}
           </div>
 

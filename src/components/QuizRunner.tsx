@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react';
 import { Button } from './ui';
+import { MathText } from './MathText';
 import { useSettingsStore } from '../store/useSettingsStore';
 import {
   explainWithAI,
@@ -195,7 +196,7 @@ export function QuizRunner({ title, subtitle, items, onFinish, onExit }: QuizRun
           </div>
 
           <p className="whitespace-pre-wrap text-[15px] font-bold leading-relaxed text-ink">
-            {item.stem}
+            <MathText>{item.stem}</MathText>
           </p>
         </div>
 
@@ -228,7 +229,9 @@ export function QuizRunner({ title, subtitle, items, onFinish, onExit }: QuizRun
                      : graded && chosen ? <X size={12} strokeWidth={3.5} />
                      : String.fromCharCode(65 + i)}
                   </span>
-                  <span className="min-w-0 flex-1 text-sm leading-relaxed text-ink">{opt}</span>
+                  <span className="min-w-0 flex-1 text-sm leading-relaxed text-ink">
+                    <MathText>{opt}</MathText>
+                  </span>
                 </button>
               );
             })}
@@ -309,7 +312,7 @@ export function QuizRunner({ title, subtitle, items, onFinish, onExit }: QuizRun
             <div className="rounded-xl bg-ink/3 p-3">
               <p className="mb-1 text-[10px] font-black text-ink-faint">参考答案</p>
               <p className="whitespace-pre-wrap text-sm font-bold leading-relaxed text-ink">
-                {item.refAnswer}
+                <MathText>{item.refAnswer}</MathText>
               </p>
             </div>
 
@@ -321,7 +324,7 @@ export function QuizRunner({ title, subtitle, items, onFinish, onExit }: QuizRun
                       {i + 1}
                     </span>
                     <span className="flex-1 whitespace-pre-wrap text-[13px] leading-relaxed text-ink-soft">
-                      {s}
+                      <MathText>{s}</MathText>
                     </span>
                   </li>
                 ))}

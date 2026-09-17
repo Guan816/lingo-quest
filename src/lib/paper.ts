@@ -335,10 +335,11 @@ export async function analyzePaper(
   onStep?: (msg: string) => void,
 ): Promise<PaperAnalysis> {
   const prompt = buildPrompt(subject, content.images.length > 0, content.text);
+  const hasImages = content.images.length > 0;
 
-  onStep?.(content.images.length ? 'AI 正在识别图片中的题目…' : 'AI 正在解析题目…');
+  onStep?.(hasImages ? 'AI 正在识别图片中的题目…' : 'AI 正在解析题目…');
 
-  const userContent: string | ContentPart[] = content.images.length
+  const userContent: string | ContentPart[] = hasImages
     ? [
         { type: 'text', text: prompt },
         ...content.images.slice(0, MAX_PAGES).map(
@@ -352,12 +353,27 @@ export async function analyzePaper(
     { role: 'user', content: userContent },
   ];
 
-  const reply = await chatComplete(cfg, turns, {
-    maxTokens: 4000,
-    temperature: 0.3,
-    // 视觉 + 长输出，给足时间
-    timeoutMs: content.images.length ? 120000 : 90000,
-  });
+  // 有图片就走视觉接口 —— 服务端会自动挑一个支持读图的服务商
+  let reply: string;
+  try {
+    reply = await chatComplete(cfg, turns, {
+      maxTokens: 4000,
+      temperature: 0.3,
+      vision: hasImages,
+      // 视觉 + 长输出，给足时间
+      timeoutMs: hasImages ? 120000 : 90000,
+    });
+  } catch (e) {
+    // 图片解析失败时给一条能对症的提示 —— 多数情况是服务端没配视觉模型
+    const msg = e instanceof Error ? e.message : String(e);
+    if (hasImages && /视觉|读图|vision|image|模型/i.test(msg)) {
+      throw new Error(
+        '图片解析失败：服务端可能没有配置支持读图的模型。'
+        + '也可以先把试卷里的文字打出来，用文字方式上传。',
+      );
+    }
+    throw e;
+  }
 
   const raw = extractJsonObject(reply);
   const analysis = normalizeAnalysis(subject, raw);

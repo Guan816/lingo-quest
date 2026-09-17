@@ -78,11 +78,28 @@ export async function queryPermission(name: PermissionName): Promise<PermissionS
 /**
  * 触发麦克风授权弹窗。
  *
- * 没有 @capacitor/permissions 插件时，最可靠的触发方式是直接调用
- * getUserMedia —— 浏览器/WebView 会弹出系统授权框。
- * 拿到流之后立刻关掉所有轨道，只为了把权限「点亮」。
+ * 两种环境走法不同：
+ *  - **原生 App**：优先用 speech-recognition 插件的 requestPermissions，
+ *    它直接调 Android 的 RECORD_AUDIO 授权流程，最可靠。
+ *    WebView 里的 getUserMedia 不保证能拉起系统授权框。
+ *  - **浏览器**：用 getUserMedia，浏览器会弹授权框。
+ *
+ * 拿到权限后立刻把音频轨道关掉，只为了把权限「点亮」。
  */
 export async function requestMicrophone(): Promise<boolean> {
+  if (isNativeApp()) {
+    try {
+      const { SpeechRecognition } = await import('@capacitor-community/speech-recognition');
+      let st = await SpeechRecognition.checkPermissions();
+      if (st.speechRecognition !== 'granted') {
+        st = await SpeechRecognition.requestPermissions();
+      }
+      if (st.speechRecognition === 'granted') return true;
+    } catch {
+      /* 插件不可用就退回下面的 getUserMedia */
+    }
+  }
+
   if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
     return false;
   }

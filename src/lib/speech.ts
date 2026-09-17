@@ -1,21 +1,74 @@
 import type { SpeechRecognitionLike } from '../vite-env.d';
+import { Capacitor } from '@capacitor/core';
+import { TextToSpeech, QueueStrategy } from '@capacitor-community/text-to-speech';
+import { SpeechRecognition } from '@capacitor-community/speech-recognition';
 import { requestPermission } from './permissionGate';
 
 /**
- * 语音能力封装：TTS（朗读）与 ASR（语音识别）。
- * 两者都基于浏览器/系统 Web Speech API，无需下载模型。
- * 不支持时所有 API 都会优雅降级，调用方据此切换到「打字模式」。
+ * 语音能力封装：TTS（朗读）与 ASR（识别）。
+ *
+ * 【为什么要走原生插件】
+ * Android WebView **不提供 Web Speech API** —— `window.speechSynthesis` 和
+ * `webkitSpeechRecognition` 在这个环境里都不存在。所以打包成 APK 之后，
+ * 光靠浏览器那套 API 会表现为「朗读没声、识别没反应」，
+ * 这不是接口没配，是运行环境根本没有这个能力。
+ *
+ * 因此这里做成两条路：
+ *   原生 App（Capacitor）→ 用 @capacitor-community 的 text-to-speech /
+ *                          speech-recognition 插件，调系统 TTS 与识别服务
+ *   浏览器 → 继续用 Web Speech API
+ *
+ * 两条路对外暴露同一组函数，调用方不用关心当前跑在哪。
  */
+
+/** 是否跑在 Capacitor 原生壳里 */
+function isNative(): boolean {
+  try {
+    return Capacitor.isNativePlatform();
+  } catch {
+    return false;
+  }
+}
 
 export const ASR_LANG = 'en-US';
 
 export function ttsSupported(): boolean {
-  return typeof window !== 'undefined' && 'speechSynthesis' in window;
+  if (typeof window === 'undefined') return false;
+  if (isNative()) return true; // 原生走系统 TTS 引擎
+  return 'speechSynthesis' in window;
 }
 
 export function asrSupported(): boolean {
   if (typeof window === 'undefined') return false;
+  if (isNative()) return true; // 原生走系统识别服务
   return Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+}
+
+/**
+ * 能力自检：给设置页展示用，帮助定位「为什么没声音 / 没反应」。
+ * 出问题时这三行就能看出是环境不支持还是配置问题。
+ */
+export interface SpeechDiagnostics {
+  /** 运行环境 */
+  platform: '原生 App' | '浏览器';
+  /** 朗读走的是哪条路 */
+  tts: '系统 TTS 引擎' | '浏览器语音合成' | '不可用';
+  /** 识别走的是哪条路 */
+  asr: '系统识别服务' | '浏览器语音识别' | '不可用';
+}
+
+export function speechDiagnostics(): SpeechDiagnostics {
+  const native = isNative();
+  const hasWebTts = typeof window !== 'undefined' && 'speechSynthesis' in window;
+  const hasWebAsr =
+    typeof window !== 'undefined' &&
+    Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+
+  return {
+    platform: native ? '原生 App' : '浏览器',
+    tts: native ? '系统 TTS 引擎' : hasWebTts ? '浏览器语音合成' : '不可用',
+    asr: native ? '系统识别服务' : hasWebAsr ? '浏览器语音识别' : '不可用',
+  };
 }
 
 /* ───────────────────────── TTS ───────────────────────── */
@@ -85,6 +138,10 @@ export function pickVoice(langPrefix = 'en'): SpeechSynthesisVoice | null {
 }
 
 export function cancelSpeak() {
+  if (isNative()) {
+    void TextToSpeech.stop().catch(() => {});
+    return;
+  }
   if (ttsSupported()) window.speechSynthesis.cancel();
 }
 
@@ -98,10 +155,36 @@ export interface SpeakOptions {
 /** 朗读一段英文；resolve 表示播完或被合理取消 */
 export async function speak(text: string, opts: SpeakOptions = {}): Promise<void> {
   if (!ttsSupported() || !text.trim()) return;
+  if (isNative()) return speakNative(text, opts);
 
   // 等语音列表就绪再取 voice，否则 Android WebView 上会没有 voice 而不出声
   await ensureVoices();
   return speakNow(text, opts);
+}
+
+/**
+ * 原生朗读：交给系统 TTS 引擎。
+ *
+ * 不抛错 —— 系统没装语音引擎、或没装英文语音包时，
+ * 这里静默失败，界面照常显示文字，不会因为朗读失败而卡住流程。
+ */
+async function speakNative(text: string, opts: SpeakOptions): Promise<void> {
+  opts.onStart?.();
+  try {
+    // 先停掉上一句，否则会把两句排队念完
+    await TextToSpeech.stop().catch(() => {});
+    await TextToSpeech.speak({
+      text,
+      lang: opts.lang ?? 'en-US',
+      rate: opts.rate ?? 0.95,
+      pitch: opts.pitch ?? 1,
+      volume: 1,
+      category: 'playback', // iOS：静音键也不拦
+      queueStrategy: QueueStrategy.Flush,
+    });
+  } catch {
+    /* 例如系统缺少 TTS 引擎：静默降级 */
+  }
 }
 
 function speakNow(text: string, opts: SpeakOptions): Promise<void> {
@@ -144,6 +227,8 @@ function speakNow(text: string, opts: SpeakOptions): Promise<void> {
  * Android WebView 要求音频由用户交互触发，否则后续 TTS 会被静默丢弃。
  */
 export function primeTts(): void {
+  // 原生走系统 TTS，不受 WebView 的「必须用户手势才能播音频」限制，无需预热
+  if (isNative()) return;
   if (!ttsSupported()) return;
   try {
     // 静音朗读一个空串，借用户手势把 TTS 通道打开
@@ -153,6 +238,60 @@ export function primeTts(): void {
     void ensureVoices();
   } catch {
     /* 忽略：不影响后续正常调用 */
+  }
+}
+
+/**
+ * 朗读自检 —— 给设置页的「试听」按钮用。
+ *
+ * 和 speak() 的区别：speak() 为了不打断流程会吞掉所有错误，
+ * 而这里要把失败原因如实带出来，否则用户只能说「没声音」，
+ * 我们分不清是没装语音引擎、缺英文语音包，还是别的。
+ */
+export async function testSpeak(): Promise<{ ok: boolean; text: string }> {
+  const sample = 'Hello! This is a test.';
+
+  if (!ttsSupported()) {
+    return { ok: false, text: '当前环境没有可用的朗读能力。' };
+  }
+
+  if (isNative()) {
+    try {
+      const { languages } = await TextToSpeech.getSupportedLanguages();
+      if (!languages.length) {
+        return {
+          ok: false,
+          text: '系统里没有安装语音引擎。到手机「设置 → 无障碍 → 文字转语音（TTS）」装一个再试。',
+        };
+      }
+      const hasEn = languages.some((l) => l.toLowerCase().startsWith('en'));
+      if (!hasEn) {
+        return {
+          ok: false,
+          text: `系统语音引擎装了 ${languages.length} 种语言，但没有英文。到「设置 → 无障碍 → 文字转语音」给英文装上语音数据。`,
+        };
+      }
+      await TextToSpeech.speak({
+        text: sample,
+        lang: 'en-US',
+        rate: 0.95,
+        pitch: 1,
+        volume: 1,
+        queueStrategy: QueueStrategy.Flush,
+      });
+      return { ok: true, text: `已交给系统朗读（引擎支持 ${languages.length} 种语言，含英文）。听到声音就正常。` };
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      return { ok: false, text: `系统朗读失败：${m.slice(0, 80)}` };
+    }
+  }
+
+  try {
+    await speak(sample);
+    return { ok: true, text: '已调用浏览器语音合成。听到声音就正常。' };
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    return { ok: false, text: `朗读失败：${m.slice(0, 80)}` };
   }
 }
 
@@ -186,12 +325,106 @@ export class SpeechError extends Error {
 
 let activeRecognition: SpeechRecognitionLike | null = null;
 
+/** 原生识别当前是否在监听（插件是单例，用这个标记避免重复 start） */
+let nativeListening = false;
+
 export function stopListening() {
+  if (isNative()) {
+    if (nativeListening) {
+      nativeListening = false;
+      void SpeechRecognition.stop().catch(() => {});
+    }
+    return;
+  }
   try {
     activeRecognition?.stop();
   } catch {
     /* ignore */
   }
+}
+
+/**
+ * 原生环境下的识别。
+ *
+ * 用 partialResults 模式：start() 立刻返回，识别过程中不断推
+ * partialResults 事件（正好对应界面上的实时字幕），
+ * 到时间或用户点停时再 stop()，取最后一条作为结果。
+ */
+async function listenNative(opts: ListenOptions): Promise<ListenResult> {
+  // 再确认一次系统级权限（前面 permissionGate 已经过了一遍，
+  // 但用户可能在系统里撤销过，这里兜底）
+  try {
+    let st = await SpeechRecognition.checkPermissions();
+    if (st.speechRecognition !== 'granted') {
+      st = await SpeechRecognition.requestPermissions();
+    }
+    if (st.speechRecognition !== 'granted') {
+      throw new SpeechError('permission', '没有麦克风权限，已切换到打字模式');
+    }
+  } catch (e) {
+    if (e instanceof SpeechError) throw e;
+    // 权限接口本身不可用时继续尝试，交给下面 start() 报真实错误
+  }
+
+  try {
+    const av = await SpeechRecognition.available();
+    if (!av.available) {
+      throw new SpeechError(
+        'unsupported',
+        '这台设备没有可用的语音识别服务，已切换到打字模式',
+      );
+    }
+  } catch (e) {
+    if (e instanceof SpeechError) throw e;
+  }
+
+  let latest = '';
+  const handle = await SpeechRecognition.addListener('partialResults', (data) => {
+    const t = data?.matches?.[0]?.trim() ?? '';
+    if (t) {
+      latest = t;
+      opts.onPartial?.(t);
+    }
+  });
+
+  const timeoutMs = opts.timeoutMs ?? 8000;
+
+  try {
+    opts.onStart?.();
+    nativeListening = true;
+
+    // partialResults: true → start() 立即返回，结果走事件
+    await SpeechRecognition.start({
+      language: opts.lang ?? ASR_LANG,
+      maxResults: 1,
+      partialResults: true,
+      popup: false,
+    });
+
+    // 等用户说完或超时
+    await new Promise<void>((resolve) => {
+      window.setTimeout(resolve, timeoutMs);
+    });
+
+    // 再给一小段时间收尾，避免最后一个词被吞
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 400));
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/permission|not allowed|denied/i.test(msg)) {
+      throw new SpeechError('permission', '没有麦克风权限，已切换到打字模式');
+    }
+    if (/not available|unavailable|no service/i.test(msg)) {
+      throw new SpeechError('unsupported', '这台设备没有可用的语音识别服务');
+    }
+    throw new SpeechError('unknown', `识别失败：${msg.slice(0, 60)}`);
+  } finally {
+    nativeListening = false;
+    void SpeechRecognition.stop().catch(() => {});
+    void handle.remove().catch(() => {});
+    opts.onEnd?.();
+  }
+
+  return { transcript: latest, confidence: 0, empty: !latest.trim() };
 }
 
 /**
@@ -208,6 +441,14 @@ export async function listen(opts: ListenOptions = {}): Promise<ListenResult> {
   if (typeof window === 'undefined') {
     throw new SpeechError('unsupported', '当前环境不支持语音识别');
   }
+  if (isNative()) {
+    const permitted = await requestPermission('microphone');
+    if (!permitted) {
+      throw new SpeechError('permission', '没有麦克风权限，已切换到打字模式');
+    }
+    return listenNative(opts);
+  }
+
   const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!Ctor) {
     throw new SpeechError('unsupported', '当前浏览器不支持语音识别');

@@ -112,15 +112,25 @@ async function request(path: string, opts: RequestInit = {}): Promise<any> {
 
 export const api = {
   getMethods: () => request('/auth/methods'),
-  register: (email: string, password: string, display_name: string) =>
+  /** 取一张图形验证码（注册时必填） */
+  captcha: () => request('/auth/captcha'),
+  register: (
+    email: string,
+    password: string,
+    display_name: string,
+    captchaId: string,
+    captchaCode: string,
+  ) =>
     request('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ email, password, display_name }),
+      body: JSON.stringify({ email, password, display_name, captchaId, captchaCode }),
     }),
   login: (email: string, password: string) =>
     request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   refresh: (refresh: string) =>
     request('/auth/refresh', { method: 'POST', body: JSON.stringify({ refresh }) }),
+  logout: (refresh: string) =>
+    request('/auth/logout', { method: 'POST', body: JSON.stringify({ refresh }) }),
   getMe: () => request('/auth/me'),
   wechatUrl: (state: string) =>
     request('/auth/wechat/url?state=' + encodeURIComponent(state)),
@@ -133,4 +143,11 @@ export const api = {
     request('/sync/push', { method: 'POST', body: JSON.stringify(payload) }),
   leaderboard: (limit = 100) => request('/leaderboard?limit=' + limit),
   leaderboardMe: () => request('/leaderboard/me'),
+
+  /* ── AI：全部走服务端代理，前端不持有任何密钥 ── */
+  aiStatus: () => request('/ai/status'),
+  aiChat: (messages: unknown[], opts: Record<string, unknown> = {}) =>
+    request('/ai/chat', { method: 'POST', body: JSON.stringify({ messages, ...opts }) }),
+  aiVision: (messages: unknown[], opts: Record<string, unknown> = {}) =>
+    request('/ai/vision', { method: 'POST', body: JSON.stringify({ messages, ...opts }) }),
 };

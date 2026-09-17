@@ -120,15 +120,23 @@ export interface LevelProgress {
 }
 
 /** AI 配置（OpenAI 兼容） */
+/**
+ * AI 相关的**用户偏好**。
+ *
+ * 注意：这里没有 BaseURL / API Key / 模型名 —— 那些都由服务端持有，
+ * 前端不接触密钥。用户只需要决定「开不开 AI」和「要不要联网」。
+ */
 export interface AIConfig {
   enabled: boolean;
-  baseUrl: string;
-  apiKey: string;
-  model: string;
   /** 接入联网搜索：让模型能查实时信息（新闻、赛事、新词等） */
   webSearch?: boolean;
-  /** 搜索服务地址，留空用默认的 SearXNG 实例 */
+  /** 搜索服务地址，留空用默认的自建 SearXNG */
   searchBaseUrl?: string;
+  /** 以下字段已废弃，仅为兼容老版本存档保留，代码中不再使用 */
+  baseUrl?: string;
+  apiKey?: string;
+  model?: string;
+  visionModel?: string;
 }
 
 /** 聊天消息（Boss 对话与自由聊共用） */

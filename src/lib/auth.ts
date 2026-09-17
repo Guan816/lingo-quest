@@ -26,7 +26,13 @@ interface AuthState {
   ready: boolean;
   init: () => Promise<void>;
   loadMethods: () => Promise<void>;
-  register: (email: string, password: string, name: string) => Promise<void>;
+  register: (
+    email: string,
+    password: string,
+    name: string,
+    captchaId: string,
+    captchaCode: string,
+  ) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   loginWithToken: (token: string, refresh: string) => Promise<void>;
   logout: () => void;
@@ -66,8 +72,8 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      register: async (email, password, name) => {
-        const r = await api.register(email, password, name);
+      register: async (email, password, name, captchaId, captchaCode) => {
+        const r = await api.register(email, password, name, captchaId, captchaCode);
         set({ token: r.token, refresh: r.refresh, user: r.user });
       },
       login: async (email, password) => {

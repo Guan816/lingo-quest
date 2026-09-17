@@ -10,6 +10,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { SectionTitle } from '../components/ui';
+import { MathText } from '../components/MathText';
 import {
   SUBJECT_LABEL,
   chapterLabel,
@@ -173,11 +174,11 @@ export default function FormulaBook() {
                           e.kind === 'formula' ? 'font-mono' : ''
                         }`}
                       >
-                        {e.text}
+                        <MathText>{e.text}</MathText>
                       </p>
                       {e.note && (
                         <p className="mt-1.5 text-[11px] leading-relaxed text-ink-faint">
-                          {e.note}
+                          <MathText>{e.note}</MathText>
                         </p>
                       )}
 
