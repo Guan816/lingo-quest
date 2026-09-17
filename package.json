@@ -25,6 +25,7 @@
     "android:assemble": "cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
+    "@capacitor/android": "^6.2.2",
     "@capacitor/core": "^6.2.0",
     "@capacitor/keyboard": "^6.0.3",
     "clsx": "^2.1.1",
