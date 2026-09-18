@@ -32,8 +32,11 @@ import UploadPaper from './pages/UploadPaper';
 import FormulaBook from './pages/FormulaBook';
 import WrongBook from './pages/WrongBook';
 import SubjectStats from './pages/SubjectStats';
+import BankGen from './pages/admin/BankGen';
+import BankList from './pages/admin/BankList';
 import { useAuthStore } from './lib/auth';
 import { useProfileStore } from './store/useProfileStore';
+import { useQuestionBankStore } from './store/useQuestionBankStore';
 
 /** 全屏沉浸式的玩法页面不显示顶部/底部栏 */
 const IMMERSIVE = [
@@ -47,6 +50,8 @@ const IMMERSIVE = [
   /^\/auth\/wechat\/callback$/,
   /^\/paper\//,
   /^\/formulas$/,
+  // 题库后台是纯操作页，不需要顶栏底栏（底栏还会盖住底部按钮）
+  /^\/admin\//,
 ];
 
 /**
@@ -125,6 +130,17 @@ function Shell() {
     })();
   }, [initAuth]);
 
+  /*
+   * 启动时拉一次线上题库。
+   *
+   * 有意放在这里而不是各科目页里：拉一次全局共用，
+   * 且失败不影响任何功能（静态题库照常能用）。
+   * store 内部有 6 小时的过期判断，不会每次切页都请求。
+   */
+  useEffect(() => {
+    void useQuestionBankStore.getState().refresh();
+  }, []);
+
   useEffect(() => {
     window.scrollTo({ top: 0 });
   }, [location.pathname]);
@@ -162,6 +178,8 @@ function Shell() {
           <Route path="/stats/:subject" element={<SubjectStats />} />
           <Route path="/paper/:subject" element={<UploadPaper />} />
           <Route path="/formulas" element={<FormulaBook />} />
+          <Route path="/admin/bank" element={<BankGen />} />
+          <Route path="/admin/bank/list" element={<BankList />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
