@@ -30,6 +30,11 @@ export interface FormulaEntry {
   note?: string;
   /** 来源标注，如「极限章节练习」「上传的试卷.pdf」 */
   from?: string;
+  /**
+   * 来源题号，如 '12'、'二(3)'。
+   * 有了它卡片才能跳回原题解析 —— 光有「来自某份卷子」找不回去。
+   */
+  fromNo?: string;
   /** 首次收录时间 */
   at: number;
 }
@@ -41,6 +46,7 @@ export interface FormulaInput {
   text: string;
   note?: string;
   from?: string;
+  fromNo?: string;
 }
 
 /** 归一化：去掉空格与常见标点，统一全半角，用于判重 */
@@ -139,6 +145,7 @@ export const useFormulaBookStore = create<FormulaBookState>()(
             text,
             note: item.note?.trim() || undefined,
             from: item.from,
+            fromNo: item.fromNo?.trim() || undefined,
             at: Date.now(),
           });
         }

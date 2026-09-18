@@ -1,4 +1,4 @@
-import { Flame, Settings2, User } from 'lucide-react';
+import { Flame, Settings, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useProfileStore, useTodayXp } from '../store/useProfileStore';
 import { useAuthStore } from '../lib/auth';
@@ -66,7 +66,7 @@ export function TopBar() {
           aria-label="设置"
           className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-white text-ink-soft shadow-pop-sm btn-pop"
         >
-          <Settings2 size={18} strokeWidth={2.6} />
+          <Settings size={18} strokeWidth={2.6} />
         </button>
       </div>
     </header>

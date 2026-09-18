@@ -8,6 +8,14 @@
  */
 import type { AIConfig, CsQuestion, Difficulty, MathQuestion } from '../types';
 import { chatComplete } from './ai';
+import {
+  EXPLAIN_STYLE_PROMPT,
+  fromLegacySteps,
+  makeExplain,
+  normalizeSteps,
+  type Explain,
+  type ExplainStep,
+} from './explain';
 
 /* ===================== 通用题目视图 ===================== */
 
@@ -34,6 +42,13 @@ export interface QuizItem {
   point: string;
   /** 公式提示 */
   formula?: string;
+  /**
+   * 结构化的四模块解析（答案 / 考点 / 解 / 技巧）。
+   *
+   * 这是答题页排版的依据 —— 具体规范见 lib/explain.ts。
+   * 由 explainOf() 懒构造并缓存在这里，避免每次渲染重算。
+   */
+  explain?: Explain;
   /** 原始题目对象，供 AI 解析时使用 */
   raw: MathQuestion | CsQuestion;
 }
@@ -212,6 +227,43 @@ export function fromCs(q: CsQuestion): QuizItem {
   };
 }
 
+/* ===================== 解析的组装 ===================== */
+
+/**
+ * 取一道题的标准四模块解析。
+ *
+ * 优先用已经结构化好的 explain；没有就从老字段
+ * （refAnswer / point / steps / formula）现场转一份。
+ * 这样老题库一行都不用改，排版就能升级。
+ */
+export function explainOf(item: QuizItem): Explain {
+  if (item.explain) return item.explain;
+
+  const steps: ExplainStep[] = fromLegacySteps(item.steps ?? []);
+  // 选项类题目：把正确项对应的字母算出来，答案里要标亮「C. xxx」
+  const answerOption =
+    item.answerIdx.length && item.options.length
+      ? item.answerIdx
+          .slice()
+          .sort((a, b) => a - b)
+          .map((i) => String.fromCharCode(65 + i))
+          .join('、')
+      : undefined;
+
+  const ex = makeExplain({
+    answer: item.refAnswer || '（未提供参考答案）',
+    answerOption,
+    point: item.point,
+    steps,
+    // 题库里的 formula 字段正好对应「速记结论」，放进技巧模块
+    tip: item.formula ? `速记：${item.formula}` : undefined,
+  });
+
+  // 缓存起来：解析区会在一次渲染里被读多次
+  item.explain = ex;
+  return ex;
+}
+
 /* ===================== 组卷 ===================== */
 
 export interface BuildOpts {
@@ -340,12 +392,18 @@ export function hintSubjective(item: QuizItem, input: string): GradeResult {
 
 /* ===================== AI 解析 ===================== */
 
-/** 把一道题交给大模型，要求给出分步讲解 */
+/**
+ * 让大模型针对单题给一份**符合排版规范**的四模块解析。
+ *
+ * 与老版本的区别：以前要求它「控制篇幅 400 字以内、每步一行」，
+ * 结果和本地解析的排版完全不是一个风格。现在两处共用
+ * EXPLAIN_STYLE_PROMPT，输出直接能喂给同一套渲染组件。
+ */
 export async function explainWithAI(
   cfg: AIConfig,
   item: QuizItem,
   opts: { userAnswer?: string; onDelta?: (t: string) => void } = {},
-): Promise<string> {
+): Promise<Explain> {
   const modeName: Record<QuizItemMode, string> = {
     single: '单项选择题',
     multi: '多项选择题',
@@ -369,24 +427,83 @@ export async function explainWithAI(
 
   const sys =
     '你是一位江苏专转本考试的资深辅导老师，擅长把数学与计算机基础题讲透。' +
-    '请用中文、分步骤讲解，每步都要说清「为什么这么做」，公式用纯文本表示（不要用 LaTeX 的 $ 符号）。' +
-    '如果学生答错了，要指出他可能的错误思路。控制篇幅在 400 字以内。';
+    '请用中文讲解，只输出 JSON。';
 
-  const user =
-    `${lines.join('\n')}\n\n` +
-    '请按以下结构回答：\n' +
-    '1. 一句话点明解题切入角度；\n' +
-    '2. 分步推导（每步一行，编号）；\n' +
-    '3. 易错提醒（如果有）。';
+  const user = [
+    lines.join('\n'),
+    '',
+    EXPLAIN_STYLE_PROMPT,
+    '',
+    '严格按下面的 JSON 结构输出（不要 markdown 代码块、不要任何解释文字）：',
+    '{',
+    '  "answer": "最终答案（选择题写选中项的原文）",',
+    '  "points": ["考点1", "考点2"],',
+    '  "steps": [',
+    '    { "text": "第一步在做什么", "math": "这一步得到的式子，没有就留空" },',
+    '    { "text": "第二步在做什么", "math": "" }',
+    '  ],',
+    '  "tip": "解题技巧或速记结论",',
+    '  "pitfall": "易错提醒，没有就留空"',
+    '}',
+    '',
+    '如果学生答错了，在 pitfall 里指出他可能的错误思路。',
+  ].join('\n');
 
-  return chatComplete(
+  const reply = await chatComplete(
     cfg,
     [
       { role: 'system', content: sys },
       { role: 'user', content: user },
     ],
-    { maxTokens: 900, temperature: 0.4, timeoutMs: 60000 },
+    { maxTokens: 1200, temperature: 0.4, timeoutMs: 60000 },
   );
+
+  return parseExplainReply(reply, item);
+}
+
+/**
+ * 把模型返回的解析 JSON 抠出来。
+ * 模型偶尔会包代码块或加前后缀，这里做容错；彻底解析失败则退回原文当解析。
+ */
+function parseExplainReply(reply: string, item: QuizItem): Explain {
+  const fenced = reply.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const raw = fenced ? fenced[1] : reply;
+  const start = raw.indexOf('{');
+  const end = raw.lastIndexOf('}');
+
+  if (start >= 0 && end > start) {
+    try {
+      const o = JSON.parse(raw.slice(start, end + 1)) as Record<string, unknown>;
+      const answer = String(o.answer ?? '').trim() || item.refAnswer;
+      const points = Array.isArray(o.points)
+        ? o.points.map((p) => String(p).trim()).filter(Boolean)
+        : item.point
+          ? [item.point]
+          : [];
+      const steps = normalizeSteps(o.steps);
+      return {
+        answer,
+        points,
+        steps,
+        tip: String(o.tip ?? '').trim() || undefined,
+        pitfall: String(o.pitfall ?? '').trim() || undefined,
+      };
+    } catch {
+      /* 落到下面的降级 */
+    }
+  }
+
+  // 降级：模型没给合法 JSON 时，把纯文本按行切成步骤，至少还能读
+  const lines = reply
+    .split(/\n+/)
+    .map((l) => l.replace(/^\s*\d+[.、)）]\s*/, '').trim())
+    .filter((l) => l.length > 1);
+
+  return {
+    answer: item.refAnswer,
+    points: item.point ? [item.point] : [],
+    steps: normalizeSteps(lines),
+  };
 }
 
 /** 把一次练习的经验值算出来 */

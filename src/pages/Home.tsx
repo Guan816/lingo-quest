@@ -6,15 +6,13 @@ import {
   ClipboardList,
   Flame,
   GraduationCap,
-  Settings,
   Sigma,
   Target,
   TrendingUp,
   Upload,
 } from 'lucide-react';
 import { SectionTitle } from '../components/ui';
-import { levelInfo } from '../lib/gamification';
-import { useProfileStore, useTodayXp } from '../store/useProfileStore';
+import { useProfileStore } from '../store/useProfileStore';
 import { useCet4Store, pendingWrongCount } from '../store/useCet4Store';
 import { useFormulaBookStore } from '../store/useFormulaBookStore';
 import { useSubjectStore } from '../store/useSubjectStore';
@@ -64,13 +62,10 @@ export default function Home() {
   const nav = useNavigate();
 
   const stats = useProfileStore((s) => s.stats);
-  const xp = useProfileStore((s) => s.xp);
   const cet4 = useCet4Store();
   const subj = useSubjectStore();
   const formulaTotal = useFormulaBookStore((s) => s.entries.length);
-  const todayXp = useTodayXp();
 
-  const info = levelInfo(xp);
   const streak = streakOf(stats.practiceDays);
 
   /** 三科合计的做题数与正确率 —— 首页只报一个总盘子 */
@@ -79,35 +74,49 @@ export default function Home() {
   const accuracy = answered > 0 ? Math.round((correct / answered) * 100) : 0;
   const wrongTotal = subj.wrong.length + pendingWrongCount(cet4.wrong);
 
+  /**
+   * 「继续练习」推荐哪一科。
+   *
+   * 手机用户点开 App 十有八九是想接着刷，而不是从头挑科目。
+   * 规则：挑**做过题但还没做满**的那一科；都没进度就默认高等数学
+   * （它是考纲第一科，分值也最重）。
+   */
+  const resume = (() => {
+    const stats = [
+      { ...SUBJECTS[0], done: subj.totals.math.answered },
+      { ...SUBJECTS[1], done: subj.totals.cs.answered },
+      { ...SUBJECTS[2], done: cet4.answered },
+    ];
+    const started = stats.filter((s) => s.done > 0 && s.done < s.total);
+    if (started.length) {
+      // 做题最多的那科最可能是「正在刷」的
+      return started.sort((a, b) => b.done - a.done)[0];
+    }
+    return stats[0];
+  })();
+
   return (
     <div className="space-y-5 pt-1">
-      {/* 顶部用户栏：等级 · 今日 XP · 设置 */}
-      <section className="flex items-center gap-3">
-        <button
-          onClick={() => nav('/stats')}
-          className="flex min-w-0 flex-1 items-center gap-3 rounded-3xl bg-white p-3.5 text-left shadow-pop-sm active:bg-ink/3"
-        >
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-grape-600 text-white">
-            <span className="text-[9px] font-black leading-none opacity-80">LV</span>
-            <span className="text-base font-black leading-none">{info.level}</span>
+      {/* 顶部不再重复画等级栏 —— 全局顶栏（TopBar）已经有了 LV + 进度 + 设置，
+          在首页再画一遍会出现「两个 LV、两个设置按钮」，手机小屏白占一整行。
+          这里改成「继续上次练习」的直达入口，一键回到未完的题。 */}
+      <button
+        onClick={() => nav(resume.to)}
+        className="btn-pop flex w-full items-center gap-3.5 rounded-3xl bg-gradient-to-br from-brand-500 to-grape-600 p-4 text-left text-white shadow-card"
+      >
+        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-white/20">
+          <resume.icon size={23} strokeWidth={2.6} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-base font-black">继续练习 · {resume.name}</span>
+          <span className="mt-0.5 block text-[11px] font-bold text-white/80">
+            {resume.done > 0
+              ? `已做 ${resume.done} / ${resume.total} 题，接着往下刷`
+              : `还没开始，${resume.total} 题等着你`}
           </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-black text-ink">{info.title}</span>
-            <span className="mt-0.5 block text-[11px] font-bold text-ink-faint">
-              今日 +{todayXp} XP · 累计 {xp} XP
-            </span>
-          </span>
-          <ChevronRight size={17} className="shrink-0 text-ink-faint" strokeWidth={2.6} />
-        </button>
-
-        <button
-          onClick={() => nav('/settings')}
-          aria-label="设置"
-          className="grid h-[62px] w-[62px] shrink-0 place-items-center rounded-3xl bg-white text-ink-soft shadow-pop-sm active:bg-ink/3"
-        >
-          <Settings size={21} strokeWidth={2.6} />
-        </button>
-      </section>
+        </span>
+        <ChevronRight size={19} className="shrink-0 text-white/85" strokeWidth={2.8} />
+      </button>
 
       {/* 今日学习概览 */}
       <section>
@@ -181,7 +190,7 @@ export default function Home() {
             wrongTotal > 0 ? `${wrongTotal} 道待订正，按科目分类` : '答错的题自动收进来'
           }
           badge={wrongTotal > 0 ? wrongTotal : undefined}
-          onClick={() => nav('/cet4/wrong')}
+          onClick={() => nav('/wrong')}
         />
 
         <ToolRow

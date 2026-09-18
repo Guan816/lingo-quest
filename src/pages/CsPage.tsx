@@ -4,7 +4,6 @@ import {
   Blocks,
   BookMarked,
   Brain,
-  ChevronRight,
   Cloud,
   Cpu,
   Database,
@@ -14,6 +13,7 @@ import {
   Link2,
   MonitorSmartphone,
   Network,
+  RotateCcw,
   Smartphone,
   Target,
   Upload,
@@ -33,7 +33,7 @@ import {
   CS_QUESTIONS,
   csChapterCount,
 } from '../data/cs';
-import { subjectStats, useSubjectStore } from '../store/useSubjectStore';
+import { pendingWrong, subjectStats, useSubjectStore } from '../store/useSubjectStore';
 import type { CsChapter, CsCourse } from '../types';
 
 const CHAPTER_ICON: Record<CsChapter, typeof Cpu> = {
@@ -72,6 +72,8 @@ export default function CsPage() {
 
   const counts = useMemo(() => csChapterCount(), []);
   const overall = subjectStats('cs', subj);
+  /** 待订正的计算机错题数（错题本入口角标） */
+  const csWrong = pendingWrong('cs', subj.wrong);
 
   /** 本科目总共做过多少题 */
   const doneTotal = useMemo(
@@ -179,19 +181,31 @@ export default function CsPage() {
           />
         </div>
 
-        <button
-          onClick={() => nav('/formulas')}
-          className="flex w-full items-center gap-2.5 rounded-2xl bg-white px-4 py-3 text-left shadow-pop-sm active:bg-ink/3"
-        >
-          <BookMarked size={17} className="shrink-0 text-grape-500" strokeWidth={2.6} />
-          <span className="min-w-0 flex-1">
-            <span className="block text-[13px] font-black text-ink">公式本 · 技巧本</span>
-            <span className="mt-0.5 block truncate text-[11px] text-ink-faint">
-              自动去重，按考纲顺序排列
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => nav('/formulas')}
+            className="flex items-center gap-2 rounded-2xl bg-white px-3.5 py-3 text-left shadow-pop-sm active:bg-ink/3"
+          >
+            <BookMarked size={17} className="shrink-0 text-grape-500" strokeWidth={2.6} />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13px] font-black text-ink">公式本</span>
+              <span className="mt-0.5 block truncate text-[11px] text-ink-faint">去重 · 按考纲</span>
             </span>
-          </span>
-          <ChevronRight size={17} className="shrink-0 text-ink-faint" strokeWidth={2.6} />
-        </button>
+          </button>
+
+          <button
+            onClick={() => nav('/wrong/cs')}
+            className="flex items-center gap-2 rounded-2xl bg-white px-3.5 py-3 text-left shadow-pop-sm active:bg-ink/3"
+          >
+            <RotateCcw size={17} className="shrink-0 text-coral-500" strokeWidth={2.6} />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13px] font-black text-ink">错题本</span>
+              <span className="mt-0.5 block truncate text-[11px] text-ink-faint">
+                {csWrong > 0 ? `待订正 ${csWrong} 道` : '答错自动收录'}
+              </span>
+            </span>
+          </button>
+        </div>
       </section>
 
       {/* 章节列表 */}

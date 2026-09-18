@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { CheckCircle2, RotateCcw } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, RotateCcw, Trash2 } from 'lucide-react';
 import { asrSupported, speechDiagnostics, testSpeak, ttsSupported } from '../lib/speech';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useProfileStore } from '../store/useProfileStore';
+import { useFormulaBookStore, SUBJECT_LABEL, type FormulaSubject } from '../store/useFormulaBookStore';
 import { markGranted, requestPermission } from '../lib/permissionGate';
 import { Button, Chip, SectionTitle } from '../components/ui';
 
@@ -18,11 +19,20 @@ export default function Settings() {
   const dailyGoal = useProfileStore((s) => s.dailyGoal);
   const setDailyGoal = useProfileStore((s) => s.setDailyGoal);
 
+  const entries = useFormulaBookStore((s) => s.entries);
+  const clearFormulas = useFormulaBookStore((s) => s.clear);
+
+  /** 二次确认的状态：null 表示没在确认中 */
+  const [clearing, setClearing] = useState<FormulaSubject | 'all' | null>(null);
+
   const [micMsg, setMicMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [speaking, setSpeaking] = useState(false);
   const [speakMsg, setSpeakMsg] = useState<{ ok: boolean; text: string } | null>(null);
   /** 语音能力自检结果：区分原生 / 浏览器，排查「没声音」时最关键的信息 */
   const diag = useMemo(() => speechDiagnostics(), []);
+
+  const formulaN = entries.filter((e) => e.kind === 'formula').length;
+  const tipN = entries.filter((e) => e.kind === 'tip').length;
 
   return (
     <div className="space-y-6 pt-1">
@@ -210,6 +220,87 @@ export default function Settings() {
           <p className="pt-1 text-[11px] leading-relaxed text-ink-faint">
             语音识别依赖系统服务。国内 Android 若不可用，App 会自动切换到打字模式，
             输入你想说的句子一样能打分、拿经验。
+          </p>
+        </div>
+      </section>
+
+      {/* 数据管理 */}
+      <section>
+        <SectionTitle>数据管理</SectionTitle>
+        <div className="card space-y-3 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-black text-ink">公式本 · 技巧本</p>
+              <p className="mt-0.5 text-[11px] leading-relaxed text-ink-faint">
+                已收录 {formulaN} 条公式、{tipN} 条技巧。清空后无法恢复。
+              </p>
+            </div>
+          </div>
+
+          {/* 清空是危险操作，二次确认放在这里而不是公式本页面上 ——
+              做题时手滑点到的概率，比专门进设置里点高得多 */}
+          {clearing === null ? (
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setClearing('math')}
+                disabled={!entries.some((e) => e.subject === 'math')}
+                className="flex items-center gap-1.5 rounded-xl bg-ink/5 px-3 py-2 text-[12px] font-black text-coral-600 disabled:opacity-40"
+              >
+                <Trash2 size={13} strokeWidth={2.6} />
+                清空数学
+              </button>
+              <button
+                onClick={() => setClearing('cs')}
+                disabled={!entries.some((e) => e.subject === 'cs')}
+                className="flex items-center gap-1.5 rounded-xl bg-ink/5 px-3 py-2 text-[12px] font-black text-coral-600 disabled:opacity-40"
+              >
+                <Trash2 size={13} strokeWidth={2.6} />
+                清空计算机
+              </button>
+              <button
+                onClick={() => setClearing('all')}
+                disabled={entries.length === 0}
+                className="flex items-center gap-1.5 rounded-xl bg-coral-50 px-3 py-2 text-[12px] font-black text-coral-600 disabled:opacity-40"
+              >
+                <Trash2 size={13} strokeWidth={2.6} />
+                清空全部
+              </button>
+            </div>
+          ) : (
+            <div className="rounded-2xl border-2 border-coral-300 bg-coral-50 p-3">
+              <p className="flex items-center gap-1.5 text-[13px] font-black text-coral-700">
+                <AlertTriangle size={15} strokeWidth={2.8} />
+                确定清空{clearing === 'all' ? '全部记录' : `${SUBJECT_LABEL[clearing]}的记录`}？
+              </p>
+              <p className="mt-1 text-[11px] leading-relaxed text-coral-600">
+                这会删掉
+                {clearing === 'all'
+                  ? `全部 ${entries.length} 条`
+                  : `${entries.filter((e) => e.subject === clearing).length} 条`}
+                记录，且**无法恢复**。试卷里已经提取过的内容不会自动补回来。
+              </p>
+              <div className="mt-2.5 flex gap-2">
+                <button
+                  onClick={() => setClearing(null)}
+                  className="rounded-xl bg-white px-3 py-1.5 text-[12px] font-black text-ink-soft"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={() => {
+                    clearFormulas(clearing === 'all' ? undefined : clearing);
+                    setClearing(null);
+                  }}
+                  className="rounded-xl bg-coral-500 px-3 py-1.5 text-[12px] font-black text-white"
+                >
+                  确认清空
+                </button>
+              </div>
+            </div>
+          )}
+
+          <p className="text-[11px] leading-relaxed text-ink-faint">
+            练习进度、错题本与公式本都存在本机。登录账号后会自动云同步。
           </p>
         </div>
       </section>

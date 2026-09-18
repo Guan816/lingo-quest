@@ -5,6 +5,12 @@
  *  - 单选 / 多选 / 判断：点选项，立即判分
  *  - 填空 / 计算 / 证明 / 综合：输入框作答，对照参考答案自评
  *  - AI 解析：开关打开时，可让模型分步讲解（本地有解析时优先展示本地的）
+ *
+ * 【解析的排版】
+ * 统一走 lib/explain.ts 定的「标准试卷答案排版规范」四模块：
+ * ① 答案（加粗标亮）② 考点 ③ 解（分步推导）④ 解题技巧・总结。
+ * 解析**默认完整展示**，没有折叠按钮 —— 考完试看答案不该还要再点一下。
+ * 模块之间靠标题字重区分层级，不用分隔线。
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -12,30 +18,44 @@ import {
   Bot,
   Check,
   ChevronRight,
-  Lightbulb,
   Loader2,
   RotateCcw,
   Sparkles,
+  TriangleAlert,
   X,
 } from 'lucide-react';
 import { Button } from './ui';
-import { MathText } from './MathText';
+import { MathBlock, MathText } from './MathText';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useProfileStore } from '../store/useProfileStore';
 import {
+  explainOf,
   explainWithAI,
   gradeObjective,
   hintSubjective,
   type GradeResult,
   type QuizItem,
 } from '../lib/quiz';
+import type { Explain } from '../lib/explain';
 
 interface QuizRunnerProps {
   title: string;
   subtitle?: string;
   items: QuizItem[];
-  /** 全部答完后回调 */
-  onFinish: (r: { correct: number; total: number; answered: Record<string, boolean> }) => void;
+  /**
+   * 全部答完后回调。
+   *
+   * `answered` 是「题目 id → 是否答对」的明细 —— 调用方靠它写错题本。
+   * 早先只传 correct/total 两个汇总数字，导致错题本永远收不到题目，
+   * 表现成「错题本一直是空的」。改这里务必保留逐题明细。
+   */
+  onFinish: (r: {
+    correct: number;
+    total: number;
+    answered: Record<string, boolean>;
+    /** 每题最后一次的作答内容，用于错题本展示 */
+    userAnswers?: Record<string, string>;
+  }) => void;
   onExit: () => void;
 }
 
@@ -44,11 +64,14 @@ export function QuizRunner({ title, subtitle, items, onFinish, onExit }: QuizRun
   const [picked, setPicked] = useState<number[]>([]);
   const [textAnswer, setTextAnswer] = useState('');
   const [graded, setGraded] = useState<GradeResult | null>(null);
-  const [aiText, setAiText] = useState('');
+  /** AI 补充讲解。本地已有解析时它只是「再讲一遍」，不是必需品 */
+  const [aiExplain, setAiExplain] = useState<Explain | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
   const [aiErr, setAiErr] = useState('');
-  const [showLocal, setShowLocal] = useState(false);
   const [answered, setAnswered] = useState<Record<string, boolean>>({});
+  /** 每题的最后一次作答内容（客观题存选项原文，主观题存输入文本）——
+      错题本要用它展示「你当时写的是什么」 */
+  const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
   const [correctCount, setCorrectCount] = useState(0);
 
   const ai = useSettingsStore((s) => s.ai);
@@ -61,14 +84,18 @@ export function QuizRunner({ title, subtitle, items, onFinish, onExit }: QuizRun
     [item],
   );
 
+  /** 本地解析（老题库现场转成四模块），AI 讲完之前先用它 */
+  const localExplain = useMemo(() => (item ? explainOf(item) : null), [item]);
+  /** 优先展示 AI 那份；没有就用本地的 */
+  const explain = aiExplain ?? localExplain;
+
   // 换题时清空作答状态
   useEffect(() => {
     setPicked([]);
     setTextAnswer('');
     setGraded(null);
-    setAiText('');
+    setAiExplain(null);
     setAiErr('');
-    setShowLocal(false);
   }, [idx]);
 
   if (!item) {
@@ -82,11 +109,15 @@ export function QuizRunner({ title, subtitle, items, onFinish, onExit }: QuizRun
 
   const progress = ((idx + (graded ? 1 : 0)) / items.length) * 100;
 
+  /** 客观题的作答内容：存选项**原文**，不存字母（选项是打乱的，字母会指错） */
+  const pickedText = () => picked.map((i) => item.options[i]).filter(Boolean).join('、');
+
   const submitObjective = () => {
     if (picked.length === 0 || graded) return;
     const g = gradeObjective(item, picked);
     setGraded(g);
     setAnswered((a) => ({ ...a, [item.id]: g.correct }));
+    setUserAnswers((a) => ({ ...a, [item.id]: pickedText() }));
     if (g.correct) setCorrectCount((n) => n + 1);
     recordAnswer(g.correct);
   };
@@ -96,6 +127,7 @@ export function QuizRunner({ title, subtitle, items, onFinish, onExit }: QuizRun
     const g = hintSubjective(item, textAnswer);
     setGraded(g);
     setAnswered((a) => ({ ...a, [item.id]: g.correct }));
+    setUserAnswers((a) => ({ ...a, [item.id]: textAnswer.trim() }));
     if (g.correct) setCorrectCount((n) => n + 1);
     recordAnswer(g.correct);
   };
@@ -106,6 +138,7 @@ export function QuizRunner({ title, subtitle, items, onFinish, onExit }: QuizRun
     const delta = ok === graded.correct ? 0 : ok ? 1 : -1;
     setCorrectCount((n) => n + delta);
     setAnswered((a) => ({ ...a, [item.id]: ok }));
+    setUserAnswers((a) => ({ ...a, [item.id]: isObjective ? pickedText() : textAnswer.trim() }));
     setGraded({ ...graded, correct: ok, feedback: ok ? '已标记为答对' : '已标记为答错' });
     // 自评纠正也要跟着改统计，否则错题数与实际对不上
     recordAnswer(ok);
@@ -114,14 +147,14 @@ export function QuizRunner({ title, subtitle, items, onFinish, onExit }: QuizRun
   const runAI = async () => {
     setAiBusy(true);
     setAiErr('');
-    setAiText('');
+    setAiExplain(null);
     try {
-      const text = await explainWithAI(ai, item, {
+      const ex = await explainWithAI(ai, item, {
         userAnswer: isObjective
           ? picked.map((i) => item.options[i]).join('、')
           : textAnswer,
       });
-      setAiText(text);
+      setAiExplain(ex);
     } catch (e: any) {
       setAiErr(e?.message || 'AI 解析失败');
     } finally {
@@ -131,7 +164,7 @@ export function QuizRunner({ title, subtitle, items, onFinish, onExit }: QuizRun
 
   const next = () => {
     if (idx + 1 >= items.length) {
-      onFinish({ correct: correctCount, total: items.length, answered });
+      onFinish({ correct: correctCount, total: items.length, answered, userAnswers });
     } else {
       setIdx((n) => n + 1);
     }
@@ -276,7 +309,7 @@ export function QuizRunner({ title, subtitle, items, onFinish, onExit }: QuizRun
 
             {/* 主观题允许用户纠正自评 */}
             {!isObjective && (
-              <div className="mt-3 flex items-center gap-2 border-t border-ink/8 pt-3">
+              <div className="mt-3 flex items-center gap-2">
                 <span className="text-[11px] font-bold text-ink-soft">我的作答是否正确？</span>
                 <button
                   onClick={() => override(true)}
@@ -299,65 +332,97 @@ export function QuizRunner({ title, subtitle, items, onFinish, onExit }: QuizRun
           </div>
         )}
 
-        {/* 解析区 */}
-        {graded && (
-          <div className="card space-y-3 p-4">
-            <div className="flex items-center justify-between">
-              <p className="flex items-center gap-1.5 text-sm font-black text-ink">
-                <Lightbulb size={16} className="text-sun-500" strokeWidth={2.8} />
-                参考答案与解析
-              </p>
-              <button
-                onClick={() => setShowLocal((v) => !v)}
-                className="text-[11px] font-bold text-brand-600"
-              >
-                {showLocal ? '收起' : '展开'}
-              </button>
+        {/* 解析区 —— 标准试卷答案排版，默认完整展开 */}
+        {graded && explain && (
+          <div className="card space-y-4 p-4">
+            {/* ① 答案 */}
+            <div>
+              <ModuleTitle>答案</ModuleTitle>
+              <div className="rounded-xl bg-mint-50 px-3.5 py-3">
+                {explain.answerOption && (
+                  <span className="mr-1.5 text-[15px] font-black text-mint-700">
+                    {explain.answerOption}.
+                  </span>
+                )}
+                <span className="text-[15px] font-black leading-relaxed text-ink">
+                  <MathText>{explain.answer}</MathText>
+                </span>
+              </div>
             </div>
 
-            <div className="rounded-xl bg-ink/3 p-3">
-              <p className="mb-1 text-[10px] font-black text-ink-faint">参考答案</p>
-              <p className="whitespace-pre-wrap text-sm font-bold leading-relaxed text-ink">
-                <MathText>{item.refAnswer}</MathText>
-              </p>
-            </div>
-
-            {showLocal && item.steps.length > 0 && (
-              <ol className="space-y-2">
-                {item.steps.map((s, i) => (
-                  <li key={i} className="flex gap-2.5">
-                    <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-brand-100 text-[10px] font-black text-brand-600">
-                      {i + 1}
-                    </span>
-                    <span className="flex-1 whitespace-pre-wrap text-[13px] leading-relaxed text-ink-soft">
-                      <MathText>{s}</MathText>
-                    </span>
-                  </li>
-                ))}
-              </ol>
+            {/* ② 考点 */}
+            {explain.points.length > 0 && (
+              <div>
+                <ModuleTitle>考点</ModuleTitle>
+                <div className="space-y-1">
+                  {explain.points.map((p, i) => (
+                    <p
+                      key={i}
+                      className="rounded-xl bg-sun-50 px-3 py-2 text-[12.5px] font-bold leading-relaxed text-sun-700"
+                    >
+                      <MathText>{p}</MathText>
+                    </p>
+                  ))}
+                </div>
+              </div>
             )}
 
-            {item.point && (
-              <p className="rounded-xl bg-sun-50 px-3 py-2 text-[12px] font-bold leading-relaxed text-sun-700">
-                考点：{item.point}
-              </p>
+            {/* ③ 解 —— 解析主体，分步推导 */}
+            {explain.steps.length > 0 && (
+              <div>
+                <ModuleTitle>解</ModuleTitle>
+                <ol className="space-y-3.5">
+                  {explain.steps.map((s, i) => (
+                    <li key={i} className="flex gap-2.5">
+                      <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-brand-100 text-[10px] font-black text-brand-600">
+                        {i + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        {/* 先写文字说明 */}
+                        {s.text && (
+                          <p className="whitespace-pre-wrap text-[13.5px] leading-[1.75] text-ink">
+                            <MathText>{s.text}</MathText>
+                          </p>
+                        )}
+                        {/* 再给公式，单独占行、水平居中 */}
+                        {s.math && <MathBlock>{s.math}</MathBlock>}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </div>
             )}
-            {item.formula && (
-              <p className="rounded-xl bg-grape-50 px-3 py-2 font-mono text-[12px] leading-relaxed text-grape-700">
-                {item.formula}
+
+            {/* ④ 解题技巧・总结 */}
+            {explain.tip && (
+              <div>
+                <ModuleTitle>解题技巧</ModuleTitle>
+                <p className="rounded-xl bg-grape-50 px-3 py-2.5 text-[12.5px] font-bold leading-relaxed text-grape-700">
+                  <MathText>{explain.tip}</MathText>
+                </p>
+              </div>
+            )}
+
+            {/* 易错提醒 */}
+            {explain.pitfall && (
+              <p className="flex items-start gap-2 rounded-xl bg-coral-50 px-3 py-2.5 text-[12.5px] font-bold leading-relaxed text-coral-700">
+                <TriangleAlert size={14} className="mt-0.5 shrink-0" strokeWidth={2.8} />
+                <span>
+                  <MathText>{explain.pitfall}</MathText>
+                </span>
               </p>
             )}
 
             {/* AI 解析：Key 全在服务端，前端只需要一个按钮，没有任何配置入口 */}
             {aiExplainOn && (
-              <div className="border-t border-ink/8 pt-3">
-                {!aiText && !aiBusy && (
+              <div>
+                {!aiBusy && (
                   <button
                     onClick={runAI}
                     className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-grape-500 to-brand-500 py-2.5 text-sm font-black text-white btn-pop"
                   >
                     <Sparkles size={15} strokeWidth={2.8} />
-                    让 AI 讲讲这道题
+                    {aiExplain ? '换个说法再讲一遍' : '让 AI 再讲讲这道题'}
                   </button>
                 )}
                 {aiBusy && (
@@ -371,21 +436,13 @@ export function QuizRunner({ title, subtitle, items, onFinish, onExit }: QuizRun
                     {aiErr}
                   </p>
                 )}
-                {aiText && (
-                  <div className="rounded-2xl bg-gradient-to-br from-grape-50 to-brand-50 p-3.5">
-                    <p className="mb-2 flex items-center gap-1.5 text-xs font-black text-grape-700">
-                      <Bot size={14} strokeWidth={2.8} /> AI 讲解
-                    </p>
-                    <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-soft">
-                      {aiText}
-                    </p>
-                    <button
-                      onClick={runAI}
-                      className="mt-2 flex items-center gap-1 text-[11px] font-bold text-grape-600"
-                    >
-                      <RotateCcw size={11} strokeWidth={3} /> 换个说法再讲一遍
+                {aiExplain && (
+                  <p className="flex items-center justify-center gap-1.5 pt-2 text-[11px] font-black text-grape-600">
+                    <Bot size={13} strokeWidth={2.8} /> 以上为 AI 讲解
+                    <button onClick={runAI} className="ml-1 underline">
+                      <RotateCcw size={11} strokeWidth={3} className="inline" /> 重讲
                     </button>
-                  </div>
+                  </p>
                 )}
               </div>
             )}
@@ -393,8 +450,15 @@ export function QuizRunner({ title, subtitle, items, onFinish, onExit }: QuizRun
         )}
       </div>
 
-      {/* 底部操作栏 */}
-      <div className="safe-bottom fixed bottom-0 left-0 right-0 z-30 border-t border-ink/5 bg-white/95 px-4 py-3 backdrop-blur">
+      {/*
+        底部操作栏。
+        z-40 故意高于 TabBar 的 z-30 —— 万一哪天某个容器的 immersive
+        判定漏了，TabBar 也不会把「提交答案」盖住（那个 bug 真发生过，
+        见 pages/WrongBook.tsx 里 setImmersive 的注释）。
+        另外用 safe-bottom-record 而不是 safe-bottom，给底部多留一点，
+        避开 TabBar 的位置。
+      */}
+      <div className="safe-bottom-record fixed bottom-0 left-0 right-0 z-40 border-t border-ink/5 bg-white/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-lg gap-2">
           {!graded ? (
             <Button
@@ -413,5 +477,20 @@ export function QuizRunner({ title, subtitle, items, onFinish, onExit }: QuizRun
         </div>
       </div>
     </>
+  );
+}
+
+/**
+ * 模块标题。
+ *
+ * 四模块（答案 / 考点 / 解 / 解题技巧）之间**不用分隔线**，
+ * 靠标题的字重与字号拉开层级 —— 线多了页面碎，读起来累。
+ */
+function ModuleTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mb-2 flex items-center gap-1.5 text-[12px] font-black tracking-wide text-ink-soft">
+      <span className="h-3 w-[3px] rounded-full bg-brand-500" />
+      {children}
+    </p>
   );
 }

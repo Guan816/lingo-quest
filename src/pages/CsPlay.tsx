@@ -105,11 +105,24 @@ export default function CsPlay() {
       subtitle={meta.subtitle}
       items={items}
       onExit={() => nav(-1)}
-      onFinish={({ correct, total }) => {
+      onFinish={({ correct, total, answered, userAnswers }) => {
         const acc = correct / total;
         subject.setStars(key, starsForQuiz(acc));
         clearLevel(key, starsForQuiz(acc), acc * 100, false);
         markToday();
+
+        // 逐题写入统计与错题本。跟 MathPlay 一样：以前漏了这一步，
+        // 导致错题本收不到任何题目。（详见 MathPlay 处注释）
+        for (const it of items) {
+          const ok = answered[it.id];
+          if (ok === undefined) continue;
+          subject.record('cs', it.chapter, {
+            correct: ok,
+            qid: it.id,
+            userAnswer: userAnswers?.[it.id],
+          });
+        }
+
         nav('/cs', { replace: true });
       }}
     />

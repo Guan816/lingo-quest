@@ -100,13 +100,29 @@ export default function MathPlay() {
       subtitle={meta.subtitle}
       items={items}
       onExit={() => nav(-1)}
-      onFinish={({ correct, total }) => {
+      onFinish={({ correct, total, answered, userAnswers }) => {
         const acc = correct / total;
         const stars = starsForQuiz(acc);
         // 章节练习记录星数；模拟卷与专项也记，方便「我的」页展示
         subject.setStars(key, stars);
         clearLevel(key, stars, acc * 100, false);
         markToday();
+
+        // ── 逐题写入统计与错题本 ──
+        // 【曾经的 bug】这里以前只调 setStars / clearLevel，
+        // 从没调用过 subject.record，导致「做题数」有数（走 profile 的另一条路）
+        // 但**错题本永远是空的** —— 逻辑写好了却没人接。
+        // 章节取题目自身的 chapter 字段（比从 id 猜测可靠）。
+        for (const it of items) {
+          const ok = answered[it.id];
+          if (ok === undefined) continue; // 跳过没作答的
+          subject.record('math', it.chapter, {
+            correct: ok,
+            qid: it.id,
+            userAnswer: userAnswers?.[it.id],
+          });
+        }
+
         nav('/math', { replace: true });
       }}
     />

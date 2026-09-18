@@ -1,5 +1,5 @@
 import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { TabBar } from './components/TabBar';
 import { TopBar } from './components/TopBar';
 import { RewardToast } from './components/RewardToast';
@@ -30,6 +30,8 @@ import CsPage from './pages/CsPage';
 import CsPlay from './pages/CsPlay';
 import UploadPaper from './pages/UploadPaper';
 import FormulaBook from './pages/FormulaBook';
+import WrongBook from './pages/WrongBook';
+import SubjectStats from './pages/SubjectStats';
 import { useAuthStore } from './lib/auth';
 import { useProfileStore } from './store/useProfileStore';
 
@@ -47,9 +49,43 @@ const IMMERSIVE = [
   /^\/formulas$/,
 ];
 
+/**
+ * 页面自己声明「我现在要沉浸式」。
+ *
+ * ── 为什么需要这个 ──
+ * 上面那份 IMMERSIVE 是**按路由**判定的，但有些页面会在**同一个路由内**
+ * 切成答题界面：最典型的是错题本 —— `/wrong` 平时是列表（该有导航栏），
+ * 点「重做」后变成 QuizRunner（不该有导航栏）。
+ *
+ * 光靠路由判断不出来，于是留一个运行时开关：页面进入答题态时调
+ * `setImmersive(true)`，退出时复位。
+ *
+ * ── 踩过的坑 ──
+ * 错题重做没走这条路，结果 TabBar（top 767）**整个盖在提交按钮
+ * （top 786, bottom 836）上面**，用户点「提交答案」实际点到了底部导航，
+ * 题目永远交不上去、错题本永远清不掉。见 App.tsx 的 immersive 计算。
+ */
+let immersiveOverride = false;
+const immersiveListeners = new Set<(v: boolean) => void>();
+
+export function setImmersive(v: boolean) {
+  if (immersiveOverride === v) return;
+  immersiveOverride = v;
+  immersiveListeners.forEach((fn) => fn(v));
+}
+
 function Shell() {
   const location = useLocation();
-  const immersive = IMMERSIVE.some((re) => re.test(location.pathname));
+  const [override, setOverride] = useState(immersiveOverride);
+
+  useEffect(() => {
+    immersiveListeners.add(setOverride);
+    return () => {
+      immersiveListeners.delete(setOverride);
+    };
+  }, []);
+
+  const immersive = override || IMMERSIVE.some((re) => re.test(location.pathname));
   const sfxEnabled = useSettingsStore((s) => s.sfxEnabled);
   const initAuth = useAuthStore((s) => s.init);
 
@@ -121,6 +157,9 @@ function Shell() {
           <Route path="/cs" element={<CsPage />} />
           <Route path="/cs/play/:mode" element={<CsPlay />} />
           <Route path="/cs/play/:mode/:value" element={<CsPlay />} />
+          <Route path="/wrong" element={<WrongBook />} />
+          <Route path="/wrong/:mode" element={<WrongBook />} />
+          <Route path="/stats/:subject" element={<SubjectStats />} />
           <Route path="/paper/:subject" element={<UploadPaper />} />
           <Route path="/formulas" element={<FormulaBook />} />
           <Route path="*" element={<Navigate to="/" replace />} />

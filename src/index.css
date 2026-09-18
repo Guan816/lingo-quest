@@ -65,6 +65,14 @@
   .safe-bottom {
     padding-bottom: calc(var(--safe-bottom) + 0.5rem);
   }
+  /**
+   * 答题器的底部操作栏专用：比 safe-bottom 多留 3.5rem，
+   * 正好避开 TabBar（约 78px）的高度。即使 immersive 判定出问题，
+   * 「提交答案」也不会被压在 TabBar 底下点不到。
+   */
+  .safe-bottom-record {
+    padding-bottom: calc(var(--safe-bottom) + 3.5rem);
+  }
   .safe-top {
     padding-top: calc(var(--safe-top) + 0.5rem);
   }

@@ -123,8 +123,29 @@ export async function prepareFileAccess(): Promise<{ ok: boolean; message?: stri
   return { ok: true };
 }
 
-/** 文件大小上限（AI 解析要传 base64，太大既慢又容易失败） */
-export const MAX_UPLOAD_BYTES = 12 * 1024 * 1024; // 12MB
+/**
+ * 文件大小上限。
+ *
+ * 【为什么从 12MB 降到 8MB】
+ * 这个上限看着是「前端能选多大的文件」，其实卡的是**服务端那一跳**：
+ * 图片要转成 base64 塞进 JSON，**base64 会让体积膨胀约 33%**。
+ * 于是 9MB 的 PDF 到服务端时已经变成约 12MB 的请求体，
+ * 再加上 prompt 和 JSON 包装，直逼服务端 16MB 的 body 上限 ——
+ * 表现就是「9MB 上传不了」。真正该限的是「编码后体积」，
+ * 所以这里按 base64 膨胀率反推：8MB × 1.34 ≈ 10.7MB，留足余量。
+ *
+ * 另外：PDF 走视觉路径时会先渲染成 JPEG，那条路上的体积由
+ * paper.ts 的压缩逻辑单独控制，不依赖这个数。
+ */
+export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024; // 8MB
+
+/** base64 编码后的体积膨胀系数（4/3 再加一点 JSON 包装开销） */
+export const BASE64_OVERHEAD = 1.34;
+
+/** 估算一个字节数转成 base64 之后的体积 */
+export function base64Size(bytes: number): number {
+  return Math.ceil(bytes * BASE64_OVERHEAD);
+}
 
 export interface FileCheckResult {
   ok: boolean;
@@ -147,7 +168,12 @@ export function checkUploadable(file: File): FileCheckResult {
   }
   if (file.size > MAX_UPLOAD_BYTES) {
     const mb = (file.size / 1024 / 1024).toFixed(1);
-    return { ok: false, message: `文件 ${mb}MB 超过 12MB 上限，请压缩或只上传需要的部分` };
+    return {
+      ok: false,
+      message:
+        `文件 ${mb}MB 超过 8MB 上限。` +
+        '扫描版 PDF 尤其大 —— 可以只截取要用的那几页，或者用图片方式分页上传。',
+    };
   }
   if (file.size === 0) {
     return { ok: false, message: '这是个空文件' };

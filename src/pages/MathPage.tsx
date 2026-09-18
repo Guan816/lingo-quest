@@ -4,12 +4,12 @@ import {
   BookMarked,
   BookOpen,
   Calculator,
-  ChevronRight,
   Dices,
   GitBranch,
   Infinity as InfinityIcon,
   Layers,
   LineChart,
+  RotateCcw,
   Sigma,
   Target,
   Upload,
@@ -24,7 +24,7 @@ import {
   SubjectHero,
 } from '../components/SubjectKit';
 import { MATH_CHAPTERS, MATH_QUESTIONS, MATH_KINDS, chapterCount } from '../data/math';
-import { useSubjectStore, subjectStats } from '../store/useSubjectStore';
+import { useSubjectStore, subjectStats, pendingWrong } from '../store/useSubjectStore';
 import type { MathChapter } from '../types';
 
 /** 章节图标 */
@@ -50,6 +50,8 @@ export default function MathPage() {
   const linear = MATH_CHAPTERS.filter((c) => c.linear);
 
   const overall = subjectStats('math', subj);
+  /** 待订正的数学错题数（错题本入口角标） */
+  const mathWrong = pendingWrong('math', subj.wrong);
 
   /** 本科目总共做过多少题（按章节统计累加，用于「已做 / 总题数」） */
   const doneTotal = useMemo(
@@ -146,19 +148,31 @@ export default function MathPage() {
           />
         </div>
 
-        <button
-          onClick={() => nav('/formulas')}
-          className="flex w-full items-center gap-2.5 rounded-2xl bg-white px-4 py-3 text-left shadow-pop-sm active:bg-ink/3"
-        >
-          <BookMarked size={17} className="shrink-0 text-grape-500" strokeWidth={2.6} />
-          <span className="min-w-0 flex-1">
-            <span className="block text-[13px] font-black text-ink">公式本 · 技巧本</span>
-            <span className="mt-0.5 block truncate text-[11px] text-ink-faint">
-              自动去重，按考纲顺序排列
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => nav('/formulas')}
+            className="flex items-center gap-2 rounded-2xl bg-white px-3.5 py-3 text-left shadow-pop-sm active:bg-ink/3"
+          >
+            <BookMarked size={17} className="shrink-0 text-grape-500" strokeWidth={2.6} />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13px] font-black text-ink">公式本</span>
+              <span className="mt-0.5 block truncate text-[11px] text-ink-faint">去重 · 按考纲</span>
             </span>
-          </span>
-          <ChevronRight size={17} className="shrink-0 text-ink-faint" strokeWidth={2.6} />
-        </button>
+          </button>
+
+          <button
+            onClick={() => nav('/wrong/math')}
+            className="flex items-center gap-2 rounded-2xl bg-white px-3.5 py-3 text-left shadow-pop-sm active:bg-ink/3"
+          >
+            <RotateCcw size={17} className="shrink-0 text-coral-500" strokeWidth={2.6} />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13px] font-black text-ink">错题本</span>
+              <span className="mt-0.5 block truncate text-[11px] text-ink-faint">
+                {mathWrong > 0 ? `待订正 ${mathWrong} 道` : '答错自动收录'}
+              </span>
+            </span>
+          </button>
+        </div>
       </section>
 
       {/* 微积分 */}

@@ -32,8 +32,7 @@ interface AuthState {
     email: string,
     password: string,
     name: string,
-    captchaId: string,
-    captchaCode: string,
+    /** 邮箱验证码 —— 图形验证码已于 2026-09-18 移除，这是唯一校验方式 */
     emailCode?: string,
   ) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
@@ -77,15 +76,8 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      register: async (email, password, name, captchaId, captchaCode, emailCode) => {
-        const r = await api.register(
-          email,
-          password,
-          name,
-          captchaId,
-          captchaCode,
-          emailCode,
-        );
+      register: async (email, password, name, emailCode) => {
+        const r = await api.register(email, password, name, emailCode);
         set({ token: r.token, refresh: r.refresh, user: r.user });
       },
       login: async (email, password) => {

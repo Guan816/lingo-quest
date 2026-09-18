@@ -9,6 +9,7 @@ import {
   GraduationCap,
   LogIn,
   LogOut,
+  RotateCcw,
   Sigma,
   Target,
   TrendingUp,
@@ -191,7 +192,7 @@ export default function Stats() {
                 ? Math.round((subj.totals.math.correct / subj.totals.math.answered) * 100)
                 : null
             }
-            onClick={() => nav('/math')}
+            onClick={() => nav('/stats/math')}
           />
           <SubjectRow
             icon={<Target size={17} strokeWidth={2.6} />}
@@ -204,7 +205,7 @@ export default function Stats() {
                 ? Math.round((subj.totals.cs.correct / subj.totals.cs.answered) * 100)
                 : null
             }
-            onClick={() => nav('/cs')}
+            onClick={() => nav('/stats/cs')}
           />
           <SubjectRow
             icon={<GraduationCap size={17} strokeWidth={2.6} />}
@@ -295,6 +296,29 @@ export default function Stats() {
               </span>
               <span className="mt-0.5 block truncate text-[11px] text-ink-faint">
                 自动去重，按考纲顺序排列
+              </span>
+            </span>
+            <ChevronRight size={17} className="shrink-0 text-ink-faint" strokeWidth={2.6} />
+          </button>
+
+          <button
+            onClick={() => nav('/wrong')}
+            className="flex w-full items-center gap-2.5 rounded-2xl bg-white px-3.5 py-3 text-left shadow-pop-sm active:bg-ink/3"
+          >
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-coral-400 to-coral-600 text-white">
+              <RotateCcw size={17} strokeWidth={2.6} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-1.5">
+                <span className="text-[13px] font-black text-ink">错题本 · 可重做</span>
+                {wrongTotal > 0 && (
+                  <span className="rounded-full bg-coral-100 px-1.5 py-0.5 text-[10px] font-black text-coral-700">
+                    {wrongTotal}
+                  </span>
+                )}
+              </span>
+              <span className="mt-0.5 block truncate text-[11px] text-ink-faint">
+                答错自动收录，重做答对就移出
               </span>
             </span>
             <ChevronRight size={17} className="shrink-0 text-ink-faint" strokeWidth={2.6} />
