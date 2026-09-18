@@ -23,8 +23,16 @@ export default function Login() {
   const [captcha, setCaptcha] = useState<{ id: string; svg: string } | null>(null);
   const [captchaCode, setCaptchaCode] = useState('');
   const [captchaBusy, setCaptchaBusy] = useState(false);
+  /** 邮箱验证码：服务端配了 SMTP 就走这条，比图形码更能证明邮箱是真的 */
+  const [emailCode, setEmailCode] = useState('');
+  const [mailBusy, setMailBusy] = useState(false);
+  const [mailSent, setMailSent] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+
+  /** 服务端配了 SMTP 就显示「获取验证码」，否则退回只填图形码 */
+  const useMailCode = !!methods.mail;
 
   /** 取一张新的验证码（注册失败 / 看不清时刷新） */
   const loadCaptcha = async () => {
@@ -45,6 +53,44 @@ export default function Login() {
   useEffect(() => {
     if (mode === 'register') void loadCaptcha();
   }, [mode]);
+
+  // 重发倒计时
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = window.setInterval(() => setCooldown((n) => Math.max(0, n - 1)), 1000);
+    return () => window.clearInterval(t);
+  }, [cooldown]);
+
+  /**
+   * 发邮箱验证码。
+   * 注意：图形验证码在这里先被消耗掉（服务端一次性校验），
+   * 所以发完必须重新取一张，否则提交注册时图形码已经是废的。
+   */
+  const sendMailCode = async () => {
+    setErr('');
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      setErr('先填一个正确的邮箱地址');
+      return;
+    }
+    if (!captchaCode) {
+      setErr('先输入下面的图形验证码，防止有人恶意刷邮件');
+      return;
+    }
+    setMailBusy(true);
+    try {
+      await api.emailSend(email, captcha?.id ?? '', captchaCode);
+      setMailSent(true);
+      setCooldown(60);
+      await loadCaptcha(); // 图形码已被消耗，换一张
+    } catch (e: any) {
+      const msg = e?.message || '邮件发送失败';
+      setErr(msg);
+      if (/图形验证码/.test(msg)) await loadCaptcha();
+      if (/已注册/.test(msg)) setMailSent(false);
+    } finally {
+      setMailBusy(false);
+    }
+  };
 
   const after = async () => {
     setErr('');
@@ -67,6 +113,7 @@ export default function Login() {
           name || email.split('@')[0],
           captcha?.id ?? '',
           captchaCode,
+          useMailCode ? emailCode : undefined,
         );
       } else {
         await login(email, password);
@@ -76,7 +123,7 @@ export default function Login() {
       const msg = e?.message || '操作失败';
       setErr(msg);
       // 验证码失败/已过期 → 自动换一张，别让用户卡在旧码上
-      if (/验证码/.test(msg)) void loadCaptcha();
+      if (/图形验证码/.test(msg)) void loadCaptcha();
     } finally {
       setBusy(false);
     }
@@ -193,9 +240,46 @@ export default function Login() {
             />
           </div>
 
-          {/* 图形验证码：注册必填。自绘 SVG，点一下换一张 */}
+          {/* 注册验证：配了 SMTP 就用「邮箱验证码」，否则退回「图形验证码」 */}
           {mode === 'register' && (
-            <div className="space-y-1.5">
+            <div className="space-y-2">
+              {useMailCode && (
+                <>
+                  <div className="flex items-stretch gap-2">
+                    <input
+                      value={emailCode}
+                      onChange={(e) =>
+                        setEmailCode(e.target.value.replace(/\D/g, '').slice(0, 6))
+                      }
+                      placeholder="邮箱验证码"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      className="flex-1 rounded-xl border-2 border-ink/10 bg-white px-3 py-3 text-center text-base font-black tracking-[0.35em] text-ink outline-none focus:border-brand-400"
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={sendMailCode}
+                      disabled={mailBusy || cooldown > 0}
+                    >
+                      {mailBusy ? (
+                        <Loader2 size={15} className="animate-spin" />
+                      ) : cooldown > 0 ? (
+                        `${cooldown}s`
+                      ) : (
+                        '获取'
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-ink-faint">
+                    {mailSent
+                      ? '验证码已发出，10 分钟内有效。没收到就看下垃圾邮件箱。'
+                      : '点「获取」会把 6 位验证码发到上面的邮箱，用来确认邮箱是你本人的。'}
+                  </p>
+                </>
+              )}
+
+              {/* 图形验证码：发邮件前要用它证明是真人；
+                  没配 SMTP 时它同时也是注册的唯一校验 */}
               <div className="flex items-stretch gap-2">
                 <button
                   type="button"
@@ -216,15 +300,19 @@ export default function Login() {
                 </button>
                 <input
                   value={captchaCode}
-                  onChange={(e) => setCaptchaCode(e.target.value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4))}
-                  placeholder="验证码"
+                  onChange={(e) =>
+                    setCaptchaCode(e.target.value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4))
+                  }
+                  placeholder="图形验证码"
                   autoCapitalize="none"
                   autoCorrect="off"
                   className="flex-1 rounded-xl border-2 border-ink/10 bg-white px-3 py-3 text-center text-base font-black tracking-[0.35em] text-ink outline-none focus:border-brand-400"
                 />
               </div>
-              <p className="text-[11px] text-ink-faint">
-                输入图中的 4 个字符（不分大小写）。看不清就点图片换一张。
+              <p className="text-[11px] leading-relaxed text-ink-faint">
+                {useMailCode
+                  ? '这 4 个字符是用来防止别人拿这台服务器刷邮件的。看不清就点图片换一张。'
+                  : '输入图中的 4 个字符（不分大小写）。看不清就点图片换一张。'}
               </p>
             </div>
           )}

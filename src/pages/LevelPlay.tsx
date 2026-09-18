@@ -309,7 +309,7 @@ function BossPlay({ level, onFinish }: { level: LevelDef; onFinish: (s: number[]
   const [busy, setBusy] = useState(false);
   const scoresRef = useRef<number[]>([]);
   const doneRef = useRef(false);
-  const online = ai.enabled && Boolean(ai.apiKey);
+  const online = ai.enabled;
 
   useEffect(() => {
     if (autoSpeak) void speak(boss.opener, { rate: ttsRate });

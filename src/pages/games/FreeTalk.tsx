@@ -86,7 +86,7 @@ function ChatView({
   const [searching, setSearching] = useState(false);
   const [done, setDone] = useState(false);
   const scoresRef = useRef<number[]>([]);
-  const online = ai.enabled && Boolean(ai.apiKey);
+  const online = ai.enabled;
 
   useEffect(() => {
     if (autoSpeak) void speak(char.opener, { rate: ttsRate });

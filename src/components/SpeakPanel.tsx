@@ -3,7 +3,7 @@ import { Keyboard, RotateCcw, Volume2 } from 'lucide-react';
 import { Button, Confetti, ScoreRing, WordDiff } from './ui';
 import { MicOrb } from './MicOrb';
 import { useSpeechRound } from '../hooks/useSpeechRound';
-import { asrSupported } from '../lib/speech';
+import { asrSupported, stopListening } from '../lib/speech';
 import { scoreLabel } from '../lib/scoring';
 import { useSettingsStore } from '../store/useSettingsStore';
 
@@ -58,6 +58,11 @@ export function SpeakPanel({
   }, [target]);
 
   const handleTap = async () => {
+    // 录音中再点一下 = 结束录音（原生侧监听提前收工，不用干等 8 秒）
+    if (state === 'listening') {
+      stopListening();
+      return;
+    }
     const r = target ? await takeTurn(target) : await takeFreeTurn();
     if (r) {
       setScored(true);
@@ -106,7 +111,6 @@ export function SpeakPanel({
           <MicOrb
             state={state}
             onClick={handleTap}
-            disabled={state === 'listening'}
             hint={state === 'listening' ? '再点一次结束录音' : undefined}
           />
 

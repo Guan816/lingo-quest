@@ -30,7 +30,8 @@ export function MicOrb({
   disabled?: boolean;
   hint?: string;
 }) {
-  const busy = state === 'thinking' || state === 'speaking';
+  // 只有「评分中 / 朗读中」是真的不能点；录音中点了要能提前收工
+  const locked = disabled === true && state !== 'listening';
   return (
     <div className="flex flex-col items-center gap-2">
       <div className="relative" style={{ width: size, height: size }}>
@@ -42,11 +43,12 @@ export function MicOrb({
         )}
         <button
           onClick={onClick}
-          disabled={disabled || busy}
+          disabled={locked}
           aria-label={LABEL[state]}
           className={clsx(
             'absolute inset-0 grid place-items-center rounded-full text-white transition-all',
-            'btn-pop active:scale-95 disabled:opacity-60',
+            'btn-pop active:scale-95',
+            locked && 'opacity-60',
             STYLE[state],
           )}
           style={{ boxShadow: state === 'listening' ? '0 0 0 6px rgba(255,107,91,.18)' : undefined }}

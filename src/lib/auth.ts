@@ -16,6 +16,8 @@ interface Methods {
   email: boolean;
   wechat: boolean;
   sms: boolean;
+  /** 服务端是否配好了 SMTP（配好才显示「获取邮箱验证码」） */
+  mail?: boolean;
 }
 
 interface AuthState {
@@ -32,6 +34,7 @@ interface AuthState {
     name: string,
     captchaId: string,
     captchaCode: string,
+    emailCode?: string,
   ) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   loginWithToken: (token: string, refresh: string) => Promise<void>;
@@ -45,7 +48,7 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       refresh: null,
       user: null,
-      methods: { email: true, wechat: false, sms: false },
+      methods: { email: true, wechat: false, sms: false, mail: false },
       ready: false,
 
       init: async () => {
@@ -66,14 +69,23 @@ export const useAuthStore = create<AuthState>()(
       loadMethods: async () => {
         try {
           const m = await api.getMethods();
-          set({ methods: { email: !!m.email, wechat: !!m.wechat, sms: !!m.sms } });
+          set({
+            methods: { email: !!m.email, wechat: !!m.wechat, sms: !!m.sms, mail: !!m.mail },
+          });
         } catch {
           /* 离线时保持默认 */
         }
       },
 
-      register: async (email, password, name, captchaId, captchaCode) => {
-        const r = await api.register(email, password, name, captchaId, captchaCode);
+      register: async (email, password, name, captchaId, captchaCode, emailCode) => {
+        const r = await api.register(
+          email,
+          password,
+          name,
+          captchaId,
+          captchaCode,
+          emailCode,
+        );
         set({ token: r.token, refresh: r.refresh, user: r.user });
       },
       login: async (email, password) => {

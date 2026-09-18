@@ -342,21 +342,21 @@ export function QuizRunner({ title, subtitle, items, onFinish, onExit }: QuizRun
               </p>
             )}
 
-            {/* AI 解析 */}
+            {/* AI 解析：Key 在服务端，前端只看用户自己的开关 */}
             {aiExplainOn && (
               <div className="border-t border-ink/8 pt-3">
                 {!aiText && !aiBusy && (
                   <button
                     onClick={runAI}
-                    disabled={!ai.enabled || !ai.apiKey}
+                    disabled={!ai.enabled}
                     className={`flex w-full items-center justify-center gap-2 rounded-2xl py-2.5 text-sm font-black ${
-                      ai.enabled && ai.apiKey
+                      ai.enabled
                         ? 'bg-gradient-to-r from-grape-500 to-brand-500 text-white btn-pop'
                         : 'bg-ink/8 text-ink-faint'
                     }`}
                   >
                     <Sparkles size={15} strokeWidth={2.8} />
-                    {ai.enabled && ai.apiKey ? '让 AI 讲讲这道题' : '需先在「我的」里配置 AI 接口'}
+                    {ai.enabled ? '让 AI 讲讲这道题' : '需先在「我的」里打开 AI 开关'}
                   </button>
                 )}
                 {aiBusy && (

@@ -40,7 +40,7 @@ export default function UploadPaper() {
   const subject: Subject = params.subject === 'cs' ? 'cs' : 'math';
 
   const ai = useSettingsStore((s) => s.ai);
-  const aiReady = ai.enabled && !!ai.apiKey;
+  const aiReady = ai.enabled;
   const addFormulas = useFormulaBookStore((s) => s.addMany);
   const subjectStore = useSubjectStore();
   const clearLevel = useProfileStore((s) => s.clearLevel);

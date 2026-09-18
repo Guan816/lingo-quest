@@ -51,6 +51,8 @@ interface ProfileState {
 
   addXp: (n: number) => void;
   registerSentence: (input: SentenceInput) => RewardEvent;
+  /** 清掉最近一条奖励 — 奖励提示被用户关掉时调用，防止「关不掉」 */
+  clearReward: () => void;
   breakCombo: () => void;
   clearLevel: (levelId: string, stars: number, avgScore: number, isBoss: boolean) => void;
   markToday: () => void;
@@ -166,6 +168,8 @@ export const useProfileStore = create<ProfileState>()(
       },
 
       breakCombo: () => set({ combo: 0 }),
+
+      clearReward: () => set({ lastReward: null }),
 
       clearLevel: (levelId, stars, avgScore, isBoss) => {
         const s = get();

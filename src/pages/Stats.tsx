@@ -40,7 +40,7 @@ export default function Stats() {
   const streak = streakOf(stats.practiceDays);
   const totalStars = Object.values(progress).reduce((a, p) => a + p.stars, 0);
   const cleared = Object.values(progress).filter((p) => p.cleared).length;
-  const aiReady = ai.enabled && !!ai.apiKey;
+  const aiReady = ai.enabled;
 
   return (
     <div className="space-y-6 pt-1">

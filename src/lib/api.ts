@@ -114,16 +114,30 @@ export const api = {
   getMethods: () => request('/auth/methods'),
   /** 取一张图形验证码（注册时必填） */
   captcha: () => request('/auth/captcha'),
+  /** 把验证码发到邮箱（发之前要先过图形验证码，防止被人拿来发垃圾邮件） */
+  emailSend: (email: string, captchaId: string, captchaCode: string) =>
+    request('/auth/email/send', {
+      method: 'POST',
+      body: JSON.stringify({ email, captchaId, captchaCode }),
+    }),
   register: (
     email: string,
     password: string,
     display_name: string,
     captchaId: string,
     captchaCode: string,
+    emailCode?: string,
   ) =>
     request('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ email, password, display_name, captchaId, captchaCode }),
+      body: JSON.stringify({
+        email,
+        password,
+        display_name,
+        captchaId,
+        captchaCode,
+        emailCode: emailCode || '',
+      }),
     }),
   login: (email: string, password: string) =>
     request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
