@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Award,
   BookMarked,
   Bot,
   ChevronRight,
   ClipboardList,
+  Database,
   Flame,
   GraduationCap,
   LogIn,
@@ -27,7 +28,9 @@ import { useSettingsStore } from '../store/useSettingsStore';
 import { useFormulaBookStore } from '../store/useFormulaBookStore';
 import { useCet4Store, pendingWrongCount } from '../store/useCet4Store';
 import { useSubjectStore } from '../store/useSubjectStore';
+import { useQuestionBankStore } from '../store/useQuestionBankStore';
 import { useAuthStore } from '../lib/auth';
+import { api } from '../lib/api';
 import { MATH_TOTAL } from '../data/math';
 import { CS_TOTAL } from '../data/cs';
 import { ProgressBar, SectionTitle } from '../components/ui';
@@ -65,6 +68,36 @@ export default function Stats() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const [confirmReset, setConfirmReset] = useState(false);
+
+  /** 线上题库里已上线的题量（用于后台入口的小徽章） */
+  const bankLive = useQuestionBankStore((s) => s.list.length);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  /*
+   * 是否显示题库后台入口。
+   *
+   * 服务端才是真正的闸门（routes/bank.ts 的 assertAdmin），
+   * 这里只是不给普通用户看一个点进去就 403 的入口。
+   * 未登录时直接不发请求。
+   */
+  useEffect(() => {
+    if (!user) {
+      setIsAdmin(false);
+      return;
+    }
+    let alive = true;
+    api
+      .adminMe()
+      .then((r: { admin?: boolean }) => {
+        if (alive) setIsAdmin(Boolean(r?.admin));
+      })
+      .catch(() => {
+        if (alive) setIsAdmin(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [user]);
 
   const info = levelInfo(stats.totalXp);
   const streak = streakOf(stats.practiceDays);
@@ -323,6 +356,36 @@ export default function Stats() {
             </span>
             <ChevronRight size={17} className="shrink-0 text-ink-faint" strokeWidth={2.6} />
           </button>
+
+          {/*
+            题库后台入口。
+            只在管理员可见 —— 但真正的闸门在服务端（routes/bank.ts 的 assertAdmin），
+            这里只是不给普通用户显示一个点进去就 403 的入口。
+          */}
+          {isAdmin && (
+            <button
+              onClick={() => nav('/admin/bank')}
+              className="flex w-full items-center gap-2.5 rounded-2xl bg-white px-3.5 py-3 text-left shadow-pop-sm active:bg-ink/3"
+            >
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-ink to-ink-soft text-white">
+                <Database size={17} strokeWidth={2.6} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-1.5">
+                  <span className="text-[13px] font-black text-ink">题库后台 · AI 出题</span>
+                  {bankLive > 0 && (
+                    <span className="rounded-full bg-mint-100 px-1.5 py-0.5 text-[10px] font-black text-mint-700">
+                      线上 {bankLive}
+                    </span>
+                  )}
+                </span>
+                <span className="mt-0.5 block truncate text-[11px] text-ink-faint">
+                  批量生成、复核、入库到对应章节
+                </span>
+              </span>
+              <ChevronRight size={17} className="shrink-0 text-ink-faint" strokeWidth={2.6} />
+            </button>
+          )}
         </div>
       </section>
 
