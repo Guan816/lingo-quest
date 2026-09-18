@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   BookMarked,
@@ -16,18 +17,21 @@ import { useProfileStore } from '../store/useProfileStore';
 import { useCet4Store, pendingWrongCount } from '../store/useCet4Store';
 import { useFormulaBookStore } from '../store/useFormulaBookStore';
 import { useSubjectStore } from '../store/useSubjectStore';
-import { MATH_TOTAL } from '../data/math';
-import { CS_TOTAL } from '../data/cs';
-import { CET4_QUESTIONS } from '../data/cet4';
+import { useQuestionBankStore, bankTotals } from '../store/useQuestionBankStore';
 import { streakOf } from '../lib/utils';
 
-/** 三个科目的入口卡（信息密度一致，视觉只用主色调区分） */
+/**
+ * 三个科目的入口卡（信息密度一致，视觉只用主色调区分）。
+ *
+ * `total` **不在这里写** —— 题量要算上线上题库，而线上题库存在 zustand 里、
+ * localStorage 水合发生在首帧之后，模块级常量会永远定格在静态题量。
+ * 所以这里只留展示用的静态部分，题量在下方的 subjectCards() 里现算。
+ */
 const SUBJECTS = [
   {
     to: '/math',
     name: '高等数学',
     desc: '微积分 80% + 线代 20%',
-    total: MATH_TOTAL,
     icon: Sigma,
     /** 数学用蓝紫 */
     grad: 'from-brand-500 to-grape-600',
@@ -38,7 +42,6 @@ const SUBJECTS = [
     to: '/cs',
     name: '计算机基础',
     desc: '课程 A 60% + 课程 B 40%',
-    total: CS_TOTAL,
     icon: Target,
     /** 计算机用绿 */
     grad: 'from-mint-500 to-mint-600',
@@ -49,7 +52,6 @@ const SUBJECTS = [
     to: '/cet4',
     name: '英语（四级）',
     desc: '听力 35% + 阅读 35%',
-    total: CET4_QUESTIONS.length,
     icon: GraduationCap,
     /** 英语用蓝 */
     grad: 'from-brand-400 to-brand-600',
@@ -58,6 +60,22 @@ const SUBJECTS = [
   },
 ] as const;
 
+/**
+ * 三科入口卡 + 实时题量。
+ *
+ * 题量统一从 bankTotals() 拿（静态题库 ∪ 线上题库），与各科目页、题库后台同源。
+ * 不要在模块顶层算 —— persist 水合在首帧之后，常量会漏掉线上题。
+ */
+function subjectCards() {
+  const totals = bankTotals();
+  const qty: Record<string, number> = {
+    '/math': totals.math,
+    '/cs': totals.cs,
+    '/cet4': totals.cet4,
+  };
+  return SUBJECTS.map((s) => ({ ...s, total: qty[s.to] ?? 0 }));
+}
+
 export default function Home() {
   const nav = useNavigate();
 
@@ -65,6 +83,11 @@ export default function Home() {
   const cet4 = useCet4Store();
   const subj = useSubjectStore();
   const formulaTotal = useFormulaBookStore((s) => s.entries.length);
+  /** 订阅三科线上题量，任一科有新题进来都会重算下面的题量 */
+  const bankMath = useQuestionBankStore((s) => s.math.length);
+  const bankCs = useQuestionBankStore((s) => s.cs.length);
+  const bankCet4 = useQuestionBankStore((s) => s.cet4.length);
+  const cards = useMemo(() => subjectCards(), [bankMath, bankCs, bankCet4]);
 
   const streak = streakOf(stats.practiceDays);
 
@@ -83,9 +106,9 @@ export default function Home() {
    */
   const resume = (() => {
     const stats = [
-      { ...SUBJECTS[0], done: subj.totals.math.answered },
-      { ...SUBJECTS[1], done: subj.totals.cs.answered },
-      { ...SUBJECTS[2], done: cet4.answered },
+      { ...cards[0], done: subj.totals.math.answered },
+      { ...cards[1], done: subj.totals.cs.answered },
+      { ...cards[2], done: cet4.answered },
     ];
     const started = stats.filter((s) => s.done > 0 && s.done < s.total);
     if (started.length) {
@@ -152,7 +175,7 @@ export default function Home() {
       {/* 三科入口 */}
       <section className="space-y-2.5">
         <SectionTitle>开始刷题</SectionTitle>
-        {SUBJECTS.map((s) => (
+        {cards.map((s) => (
           <button
             key={s.to}
             onClick={() => nav(s.to)}
