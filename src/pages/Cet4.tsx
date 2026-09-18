@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Brain,
   ChevronDown,
   ChevronRight,
   ClipboardList,
@@ -9,13 +8,12 @@ import {
   GraduationCap,
   Sparkles,
   Target,
-  Wand2,
 } from 'lucide-react';
-import { Button, Card, Chip, SectionTitle, StarRow } from '../components/ui';
-import { CET4_HOT_WORDS, CET4_KINDS, type Cet4KindMeta } from '../data/cet4';
+import { Button, Card, SectionTitle, StarRow } from '../components/ui';
+import { StructureCard, SubjectHero } from '../components/SubjectKit';
+import { CET4_HOT_WORDS, CET4_KINDS, CET4_QUESTIONS, type Cet4KindMeta } from '../data/cet4';
 import { useProfileStore } from '../store/useProfileStore';
 import { useCet4Store, pendingWrongCount } from '../store/useCet4Store';
-import { useSettingsStore } from '../store/useSettingsStore';
 import type { Cet4Kind } from '../types';
 
 const GROUPS: { key: Cet4KindMeta['group']; title: string; hint: string }[] = [
@@ -25,11 +23,18 @@ const GROUPS: { key: Cet4KindMeta['group']; title: string; hint: string }[] = [
   { key: '输出', title: '写作与翻译 · 各 15%', hint: '先保证结构完整、信息准确，再追求高级表达。' },
 ];
 
+/** 四级卷面结构（听力/阅读/写作/翻译四块，与官方比例一致） */
+const CET4_STRUCTURE = [
+  { name: '听力', count: '25 题', score: '35%' },
+  { name: '阅读', count: '30 题', score: '35%' },
+  { name: '写作', count: '1 篇', score: '15%' },
+  { name: '翻译', count: '1 段', score: '15%' },
+];
+
 export default function Cet4() {
   const nav = useNavigate();
   const progress = useProfileStore((s) => s.progress);
   const cet4 = useCet4Store();
-  const ai = useSettingsStore((s) => s.ai);
   const [wordsOpen, setWordsOpen] = useState(false);
 
   const accuracy = cet4.answered > 0 ? Math.round((cet4.correct / cet4.answered) * 100) : 0;
@@ -37,45 +42,33 @@ export default function Cet4() {
   const starsOf = (kind: Cet4Kind): number =>
     progress[`cet4-${kind}`]?.stars ?? cet4.bestStars[kind] ?? 0;
 
-  const totalStars = CET4_KINDS.reduce((n, k) => n + starsOf(k.kind), 0);
-  const maxStars = CET4_KINDS.length * 3;
+  /** 已做 / 总题数：四级题库没记逐题记录，用累计答题数对题库总量 */
+  const doneTotal = cet4.answered;
 
   return (
-    <div className="space-y-6 pt-1">
-      {/* 顶部：目标与总览 */}
-      <section className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-grape-500 via-brand-500 to-brand-600 p-5 text-white shadow-card">
-        <div className="relative z-10">
-          <Chip tone="gray" className="mb-3 bg-white/25 text-white">
-            <GraduationCap size={13} strokeWidth={3} /> 大学英语四级
-          </Chip>
-          <h1 className="text-balance text-2xl font-black leading-tight">
-            0 基础，也能一步步冲着 425 去
-          </h1>
-          <p className="mt-1 text-sm text-white/85">
-            听力 35% + 阅读 35% 决定下限，写作翻译各 15% 决定上限。先啃分值高的。
-          </p>
+    <div className="space-y-5 pt-1">
+      <SubjectHero
+        tag="江苏专转本 · 英语（四级折算）"
+        tagIcon={<GraduationCap size={13} strokeWidth={3} />}
+        title="听力 35% + 阅读 35%"
+        desc="专转本英语按四级成绩折算，练四级就是备考。先啃分值高的听力和阅读。"
+        bg="bg-gradient-to-br from-brand-400 via-brand-500 to-brand-600"
+        deco={<GraduationCap className="h-28 w-28" strokeWidth={1.2} />}
+        stats={[
+          { label: '累计答题', value: cet4.answered },
+          { label: '正确率', value: cet4.answered ? `${accuracy}%` : '—' },
+          { label: '已做 / 总题数', value: `${doneTotal}/${CET4_QUESTIONS.length}` },
+        ]}
+      />
 
-          <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-            <MiniStat label="累计答题" value={cet4.answered} />
-            <MiniStat label="正确率" value={cet4.answered ? `${accuracy}%` : '—'} />
-            <MiniStat label="星数" value={`${totalStars}/${maxStars}`} />
-          </div>
-        </div>
-        <Target className="absolute -right-5 -top-5 h-28 w-28 text-white/15" strokeWidth={1.5} />
-      </section>
-
-      {/* 分值分布小提示 */}
-      <Card className="border-l-4 border-sun-500">
-        <div className="flex items-start gap-3">
-          <Brain size={20} className="mt-0.5 shrink-0 text-sun-600" strokeWidth={2.6} />
-          <div className="text-xs leading-relaxed text-ink-soft">
-            <p className="mb-1 text-sm font-black text-ink">为什么先练听力和阅读？</p>
-            两者合计占 <b className="text-ink">70%</b>。听力 25 题、阅读 30 题，
-            而<b className="text-ink">仔细阅读</b>和<b className="text-ink">听力篇章</b>单题分值最高——
-            一道等于四道选词填空。时间不够时，先把这两个拿稳。
-          </div>
-        </div>
-      </Card>
+      {/* 试卷结构 & 分值 */}
+      <StructureCard
+        icon={<Target size={20} strokeWidth={2.6} />}
+        accent="border-brand-500"
+        iconClass="text-brand-600"
+        rows={CET4_STRUCTURE}
+        tip="仔细阅读与听力篇章单题分值最高，一道等于四道选词填空。时间不够就先拿稳这两块。"
+      />
 
       {/* 刷题工具：考官模式 + 错题本 */}
       <section>
@@ -92,7 +85,7 @@ export default function Cet4() {
               <p className="flex items-center gap-1 text-sm font-black text-ink">
                 <Dices size={14} strokeWidth={3} className="text-brand-500" /> 考官随机抽题
               </p>
-              <p className="text-xs text-ink-faint">全题型混排，10 题一组</p>
+              <p className="truncate text-xs text-ink-faint">全题型混排，10 题一组</p>
             </div>
           </button>
 
@@ -107,7 +100,7 @@ export default function Cet4() {
               <p className="flex items-center gap-1 text-sm font-black text-ink">
                 <ClipboardList size={14} strokeWidth={3} className="text-coral-500" /> 错题本
               </p>
-              <p className="text-xs text-ink-faint">
+              <p className="truncate text-xs text-ink-faint">
                 {pendingWrong > 0 ? `${pendingWrong} 道待订正` : '答错的题自动收进来'}
               </p>
             </div>
@@ -125,9 +118,7 @@ export default function Cet4() {
         const items = CET4_KINDS.filter((k) => k.group === g.key);
         return (
           <section key={g.key}>
-            <SectionTitle>
-              {g.title}
-            </SectionTitle>
+            <SectionTitle>{g.title}</SectionTitle>
             <p className="-mt-2 mb-3 px-1 text-xs text-ink-faint">{g.hint}</p>
             <div className="space-y-2.5">
               {items.map((k) => (
@@ -161,41 +152,29 @@ export default function Cet4() {
         );
       })}
 
-      {/* AI 出题 */}
+      {/* AI 出题：只留一个按钮，不再有任何配置说明 */}
       <section>
-        <SectionTitle>AI 出更多题</SectionTitle>
+        <SectionTitle>AI 智能出题</SectionTitle>
         <Card>
-          <div className="flex items-start gap-3">
-            <Wand2 size={20} className="mt-0.5 shrink-0 text-grape-500" strokeWidth={2.6} />
-            <div className="flex-1 text-xs leading-relaxed text-ink-soft">
-              <p className="mb-1 text-sm font-black text-ink">
-                题库会打乱顺序反复练，但总有用完的一天
-              </p>
-              进入任意题型后，点右上角
-              <b className="text-ink">「AI 出题」</b>
-              ，就能让已配置的大模型按四级真题的题型与难度
-              <b className="text-ink">现场生成新题</b>，无限刷。
-              {!ai.enabled && (
-                <span className="mt-2 block rounded-2xl bg-sun-50 px-3 py-2 text-sun-700">
-                  还没配置 AI 接口？去设置页填一个 OpenAI 兼容接口（DeepSeek / 通义 / Moonshot 都行）即可。
-                </span>
-              )}
-            </div>
-          </div>
+          <p className="text-xs leading-relaxed text-ink-soft">
+            题库会打乱顺序反复练，但总有用完的一天。进入任意题型后点右上角
+            <b className="text-ink">「AI 出题」</b>
+            ，就能按四级真题的题型与难度现场生成新题，无限刷。
+          </p>
           <Button
             variant="grape"
             size="sm"
             block
             className="mt-3"
             icon={<Sparkles size={16} strokeWidth={3} />}
-            onClick={() => nav(ai.enabled ? '/cet4/play/careful' : '/settings')}
+            onClick={() => nav('/cet4/play/careful')}
           >
-            {ai.enabled ? '去练仔细阅读（可 AI 加题）' : '去配置 AI 接口'}
+            AI 智能出题
           </Button>
         </Card>
       </section>
 
-      {/* 高频词 */}
+      {/* 高频词：默认折叠，只露前 6 个 */}
       <section>
         <SectionTitle
           action={
@@ -215,7 +194,7 @@ export default function Cet4() {
           四级高频搭配
         </SectionTitle>
         <div className="card flex flex-wrap gap-2 p-4">
-          {(wordsOpen ? CET4_HOT_WORDS : CET4_HOT_WORDS.slice(0, 10)).map((w) => (
+          {(wordsOpen ? CET4_HOT_WORDS : CET4_HOT_WORDS.slice(0, 6)).map((w) => (
             <span
               key={w.en}
               className="rounded-2xl bg-ink/5 px-3 py-1.5 text-xs font-bold text-ink"
@@ -224,19 +203,18 @@ export default function Cet4() {
               <span className="ml-1.5 font-normal text-ink-faint">{w.zh}</span>
             </span>
           ))}
+          {!wordsOpen && (
+            <button
+              onClick={() => setWordsOpen(true)}
+              className="rounded-2xl bg-brand-50 px-3 py-1.5 text-xs font-black text-brand-600"
+            >
+              还有 {CET4_HOT_WORDS.length - 6} 个…
+            </button>
+          )}
         </div>
       </section>
 
       <div className="h-2" />
-    </div>
-  );
-}
-
-function MiniStat({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="rounded-2xl bg-white/20 py-2">
-      <p className="text-lg font-black leading-tight">{value}</p>
-      <p className="mt-0.5 text-[11px] font-bold text-white/80">{label}</p>
     </div>
   );
 }

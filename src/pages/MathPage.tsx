@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   BookMarked,
   BookOpen,
-  Brain,
   Calculator,
   ChevronRight,
   Dices,
@@ -16,11 +15,15 @@ import {
   Upload,
   Variable,
 } from 'lucide-react';
-import { Card, Chip, SectionTitle } from '../components/ui';
-import { ChapterCard, DrillButton, SubjectHero } from '../components/SubjectKit';
+import { SectionTitle } from '../components/ui';
+import {
+  ChapterCard,
+  DrillButton,
+  MiniEntry,
+  StructureCard,
+  SubjectHero,
+} from '../components/SubjectKit';
 import { MATH_CHAPTERS, MATH_QUESTIONS, MATH_KINDS, chapterCount } from '../data/math';
-import { useSettingsStore } from '../store/useSettingsStore';
-import { useProfileStore } from '../store/useProfileStore';
 import { useSubjectStore, subjectStats } from '../store/useSubjectStore';
 import type { MathChapter } from '../types';
 
@@ -38,9 +41,7 @@ const CHAPTER_ICON: Record<MathChapter, typeof Sigma> = {
 
 export default function MathPage() {
   const nav = useNavigate();
-  const progress = useProfileStore((s) => s.progress);
   const subj = useSubjectStore();
-  const aiExplain = useSettingsStore((s) => s.aiExplain);
   const [linearOpen, setLinearOpen] = useState(true);
 
   const counts = useMemo(() => chapterCount(), []);
@@ -49,11 +50,13 @@ export default function MathPage() {
   const linear = MATH_CHAPTERS.filter((c) => c.linear);
 
   const overall = subjectStats('math', subj);
-  const totalStars = MATH_CHAPTERS.reduce(
-    (n, c) => n + (progress[`math-${c.key}`]?.stars ?? subj.stars[`math-${c.key}`] ?? 0),
-    0,
+
+  /** 本科目总共做过多少题（按章节统计累加，用于「已做 / 总题数」） */
+  const doneTotal = useMemo(
+    () =>
+      MATH_CHAPTERS.reduce((n, c) => n + (subj.chapterStats[`math-${c.key}`]?.answered ?? 0), 0),
+    [subj.chapterStats],
   );
-  const maxStars = MATH_CHAPTERS.length * 3;
 
   const startDrill = (chapter?: MathChapter) => {
     nav(chapter ? `/math/play/chapter/${chapter}` : '/math/play/mix');
@@ -62,7 +65,6 @@ export default function MathPage() {
   const renderChapter = (c: (typeof MATH_CHAPTERS)[number]) => {
     const Icon = CHAPTER_ICON[c.key];
     const key = `math-${c.key}`;
-    const stars = progress[key]?.stars ?? subj.stars[key] ?? 0;
     const st = subj.chapterStats[key];
     const accuracy =
       st && st.answered > 0 ? Math.round((st.correct / st.answered) * 100) : null;
@@ -72,7 +74,9 @@ export default function MathPage() {
         name={c.name}
         hint={c.hint}
         count={counts[c.key] ?? 0}
-        stars={stars}
+        done={st?.answered ?? 0}
+        /* 星 = 该章在卷面中的分值权重（满分 3 星），不是熟练度 */
+        stars={c.weight >= 18 ? 3 : c.weight >= 12 ? 2 : 1}
         maxStars={3}
         accuracy={accuracy}
         badge={c.linear ? '线代' : undefined}
@@ -83,85 +87,63 @@ export default function MathPage() {
   };
 
   return (
-    <div className="space-y-6 pt-1">
+    <div className="space-y-5 pt-1">
       <SubjectHero
         tag="江苏专转本 · 高等数学"
         tagIcon={<Sigma size={13} strokeWidth={3} />}
         title="微积分 80% + 线代 20%"
-        desc="满分 150 / 120 分钟。计算题占 43%，是拉开差距的地方；先啃极限与微分，再攻积分。"
+        desc="满分 150 / 120 分钟。计算题独占 43%，是拉开差距的地方。"
         bg="bg-gradient-to-br from-brand-500 via-brand-600 to-grape-600"
         deco={<Sigma className="h-28 w-28" strokeWidth={1.2} />}
         stats={[
           { label: '累计答题', value: overall.answered },
           { label: '正确率', value: overall.answered ? `${overall.accuracy}%` : '—' },
-          { label: '星数', value: `${totalStars}/${maxStars}` },
+          { label: '已做 / 总题数', value: `${doneTotal}/${MATH_QUESTIONS.length}` },
         ]}
       />
 
-      {/* 卷面结构提示 */}
-      <Card className="border-l-4 border-sun-500">
-        <div className="flex items-start gap-3">
-          <Brain size={20} className="mt-0.5 shrink-0 text-sun-600" strokeWidth={2.6} />
-          <div className="text-xs leading-relaxed text-ink-soft">
-            <p className="mb-1.5 text-sm font-black text-ink">卷面长什么样？</p>
-            <div className="space-y-1">
-              {MATH_KINDS.map((k) => (
-                <div key={k.key} className="flex items-center justify-between gap-2">
-                  <span className="font-bold text-ink">{k.name}</span>
-                  <span className="text-ink-faint">{k.hint}</span>
-                </div>
-              ))}
-            </div>
-            <p className="mt-2 border-t border-ink/8 pt-2 text-ink-faint">
-              难度结构：较易 30% / 中等 50% / 较难 20%。先把较易、中等拿到手，就有 120 分。
-            </p>
-          </div>
-        </div>
-      </Card>
+      {/* 试卷结构 & 分值 */}
+      <StructureCard
+        icon={<Calculator size={20} strokeWidth={2.6} />}
+        accent="border-brand-500"
+        iconClass="text-brand-600"
+        rows={MATH_KINDS.map((k) => ({
+          name: k.name,
+          count: `${k.count} 题 × ${k.perScore} 分`,
+          score: `${k.perScore * k.count} 分`,
+        }))}
+        tip="计算题独占 43%、选择填空 21%+16%，难度结构为较易 30% / 中等 50% / 较难 20%。"
+      />
 
       {/* 刷题入口 */}
       <section className="space-y-2">
-        <SectionTitle
-          action={
-            aiExplain ? (
-              <Chip tone="gray" className="bg-grape-100 text-grape-700">
-                AI 解析已开
-              </Chip>
-            ) : null
-          }
-        >
-          开始刷题
-        </SectionTitle>
+        <SectionTitle>开始刷题</SectionTitle>
         <DrillButton
           icon={<Dices size={20} strokeWidth={2.6} />}
           title="整套模拟卷"
-          desc="按真题题型配比出题：单选 + 填空 + 计算 + 证明 + 综合"
+          desc="按真题题型配比出题，五种题型混排"
           onClick={() => startDrill()}
         />
         <DrillButton
           icon={<Upload size={20} strokeWidth={2.6} />}
           title="上传试卷，AI 解析"
-          desc="传 PDF 或拍照，AI 拆出题目、核心公式与解题技巧，再选顺序答题或创新练习"
+          desc="传 PDF 或拍照，自动拆题并提取公式技巧"
           onClick={() => nav('/paper/math')}
           tone="sun"
         />
         <div className="grid grid-cols-2 gap-2">
-          <button
+          <MiniEntry
+            icon={<Target size={18} className="text-brand-500" strokeWidth={2.6} />}
+            title="只练选择填空"
+            desc="8×4 + 6×4 = 56 分"
             onClick={() => nav('/math/play/kind/choice')}
-            className="flex flex-col items-start gap-1.5 rounded-2xl border-2 border-ink/8 bg-white p-3.5 text-left active:border-brand-300"
-          >
-            <Target size={18} className="text-brand-500" strokeWidth={2.6} />
-            <span className="text-sm font-black text-ink">只练选择填空</span>
-            <span className="text-[11px] leading-relaxed text-ink-faint">8×4 + 6×4 = 56 分</span>
-          </button>
-          <button
+          />
+          <MiniEntry
+            icon={<Sigma size={18} className="text-grape-500" strokeWidth={2.6} />}
+            title="只练计算证明"
+            desc="8×8 + 1×10 = 74 分"
             onClick={() => nav('/math/play/kind/calc')}
-            className="flex flex-col items-start gap-1.5 rounded-2xl border-2 border-ink/8 bg-white p-3.5 text-left active:border-brand-300"
-          >
-            <Sigma size={18} className="text-grape-500" strokeWidth={2.6} />
-            <span className="text-sm font-black text-ink">只练计算证明</span>
-            <span className="text-[11px] leading-relaxed text-ink-faint">8×8 + 1×10 = 74 分</span>
-          </button>
+          />
         </div>
 
         <button
@@ -171,8 +153,8 @@ export default function MathPage() {
           <BookMarked size={17} className="shrink-0 text-grape-500" strokeWidth={2.6} />
           <span className="min-w-0 flex-1">
             <span className="block text-[13px] font-black text-ink">公式本 · 技巧本</span>
-            <span className="mt-0.5 block text-[11px] text-ink-faint">
-              做题与解析中收集的公式技巧，按考纲顺序排好
+            <span className="mt-0.5 block truncate text-[11px] text-ink-faint">
+              自动去重，按考纲顺序排列
             </span>
           </span>
           <ChevronRight size={17} className="shrink-0 text-ink-faint" strokeWidth={2.6} />

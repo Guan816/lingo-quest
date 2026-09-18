@@ -100,4 +100,49 @@ export const ACHIEVEMENTS: Achievement[] = [
     emoji: '⏱️',
     test: (s) => s.minutesSpoken >= 30,
   },
+
+  /* ─────────── 备考模块：三科做题（与上面的口语类并存） ─────────── */
+
+  {
+    id: 'a-quiz-50',
+    name: '题海起步',
+    desc: '累计做满 50 道题',
+    emoji: '📝',
+    test: (s) => (s.questionsDone ?? 0) >= 50,
+  },
+  {
+    id: 'a-quiz-200',
+    name: '刷题成瘾',
+    desc: '累计做满 200 道题',
+    emoji: '🚀',
+    test: (s) => (s.questionsDone ?? 0) >= 200,
+  },
+  {
+    id: 'a-quiz-500',
+    name: '题海遨游',
+    desc: '累计做满 500 道题',
+    emoji: '🧠',
+    test: (s) => (s.questionsDone ?? 0) >= 500,
+  },
+  {
+    id: 'a-correct-100',
+    name: '百题斩',
+    desc: '累计答对 100 道题',
+    emoji: '✅',
+    test: (s) => (s.questionsCorrect ?? 0) >= 100,
+  },
+  {
+    id: 'a-quiz-streak-3',
+    name: '三日不辍',
+    desc: '连续刷题 3 天',
+    emoji: '📅',
+    test: (s) => s.practiceDays.length >= 3,
+  },
+  {
+    id: 'a-quiz-streak-7',
+    name: '七日成习',
+    desc: '连续刷题 7 天',
+    emoji: '🗓️',
+    test: (s) => s.practiceDays.length >= 7,
+  },
 ];

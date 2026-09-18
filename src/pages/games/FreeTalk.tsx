@@ -86,7 +86,8 @@ function ChatView({
   const [searching, setSearching] = useState(false);
   const [done, setDone] = useState(false);
   const scoresRef = useRef<number[]>([]);
-  const online = ai.enabled;
+  // AI 由服务端统一提供，用户侧没有开关，永远在线
+  const online = true;
 
   useEffect(() => {
     if (autoSpeak) void speak(char.opener, { rate: ttsRate });

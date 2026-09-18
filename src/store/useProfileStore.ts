@@ -15,6 +15,8 @@ const EMPTY_STATS: PlayerStats = {
   bossCleared: 0,
   comboBest: 0,
   minutesSpoken: 0,
+  questionsDone: 0,
+  questionsCorrect: 0,
 };
 
 export interface SentenceInput {
@@ -50,6 +52,12 @@ interface ProfileState {
   isSyncing: boolean;
 
   addXp: (n: number) => void;
+  /**
+   * 记一道题的作答结果（数学 / 计算机 / 英语共用）。
+   * 只累计统计与成就，不发经验 —— 经验由各科目的结算逻辑单独发，
+   * 避免同一道题既算「答题」又算「开口」导致经验翻倍。
+   */
+  recordAnswer: (correct: boolean) => void;
   registerSentence: (input: SentenceInput) => RewardEvent;
   /** 清掉最近一条奖励 — 奖励提示被用户关掉时调用，防止「关不掉」 */
   clearReward: () => void;
@@ -168,6 +176,21 @@ export const useProfileStore = create<ProfileState>()(
       },
 
       breakCombo: () => set({ combo: 0 }),
+
+      recordAnswer: (correct) => {
+        const s = get();
+        const stats: PlayerStats = {
+          ...s.stats,
+          questionsDone: (s.stats.questionsDone ?? 0) + 1,
+          questionsCorrect: (s.stats.questionsCorrect ?? 0) + (correct ? 1 : 0),
+        };
+        set({
+          stats,
+          achievements: unlockedFrom(stats),
+          todayDate: todayKey(),
+        });
+        queuePush();
+      },
 
       clearReward: () => set({ lastReward: null }),
 

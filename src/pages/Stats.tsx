@@ -1,50 +1,94 @@
-import type { ReactNode } from 'react';
 import { useState } from 'react';
 import {
+  Award,
   BookMarked,
   Bot,
   ChevronRight,
+  ClipboardList,
   Flame,
-  Mic2,
-  Settings2,
-  Sparkles,
-  Sword,
-  Timer,
+  GraduationCap,
+  LogIn,
+  LogOut,
+  Sigma,
+  Target,
   TrendingUp,
+  Trophy,
   Upload,
+  UserRound,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useNavigate } from 'react-router-dom';
 import { ACHIEVEMENTS } from '../data/achievements';
-import { ALL_LEVELS, WORLDS } from '../data/curriculum';
 import { levelInfo } from '../lib/gamification';
-import { formatMinutes, streakOf, todayKey } from '../lib/utils';
+import { streakOf } from '../lib/utils';
 import { useProfileStore } from '../store/useProfileStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useFormulaBookStore } from '../store/useFormulaBookStore';
-import { Button, ProgressBar, SectionTitle } from '../components/ui';
+import { useCet4Store, pendingWrongCount } from '../store/useCet4Store';
+import { useSubjectStore } from '../store/useSubjectStore';
+import { useAuthStore } from '../lib/auth';
+import { MATH_TOTAL } from '../data/math';
+import { CS_TOTAL } from '../data/cs';
+import { ProgressBar, SectionTitle } from '../components/ui';
+import type { ReactNode } from 'react';
+
+/** 底部保留的通用成就（口语类、英语专属的徽章不再展示） */
+const KEEP_ACHIEVEMENTS = new Set([
+  'a-first-word',
+  'a-combo-10',
+  'a-perfect-1',
+  'a-perfect-20',
+  'a-streak-3',
+  'a-streak-7',
+  'a-xp-500',
+  'a-xp-2000',
+  'a-vocab-40',
+  'a-quiz-50',
+  'a-quiz-200',
+  'a-quiz-500',
+  'a-correct-100',
+  'a-quiz-streak-3',
+  'a-quiz-streak-7',
+]);
 
 export default function Stats() {
   const nav = useNavigate();
   const stats = useProfileStore((s) => s.stats);
   const achievements = useProfileStore((s) => s.achievements);
-  const progress = useProfileStore((s) => s.progress);
   const resetProfile = useProfileStore((s) => s.resetProfile);
-  const ai = useSettingsStore((s) => s.ai);
   const aiExplain = useSettingsStore((s) => s.aiExplain);
   const setSetting = useSettingsStore((s) => s.set);
   const formulaTotal = useFormulaBookStore((s) => s.entries.length);
+  const cet4 = useCet4Store();
+  const subj = useSubjectStore();
+  const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
   const [confirmReset, setConfirmReset] = useState(false);
 
   const info = levelInfo(stats.totalXp);
   const streak = streakOf(stats.practiceDays);
-  const totalStars = Object.values(progress).reduce((a, p) => a + p.stars, 0);
-  const cleared = Object.values(progress).filter((p) => p.cleared).length;
-  const aiReady = ai.enabled;
+
+  /** 三科合计 */
+  const answered = subj.totals.math.answered + subj.totals.cs.answered + cet4.answered;
+  const correct = subj.totals.math.correct + subj.totals.cs.correct + cet4.correct;
+  const accuracy = answered > 0 ? Math.round((correct / answered) * 100) : 0;
+  const wrongTotal = subj.wrong.length + pendingWrongCount(cet4.wrong);
+
+  /** 掌握的知识点：练过且有正确率的章节数 + 四级练过的题型数 */
+  const masteredChapters =
+    Object.values(subj.chapterStats).filter((s) => s.answered > 0 && s.correct / s.answered >= 0.8)
+      .length;
+  const masteredKinds = Object.keys(cet4.bestStars).length;
+  const mastered = masteredChapters + masteredKinds;
+
+  /** 模拟次数：数学 + 计算机整卷次数 + 四级练习次数 */
+  const mockCount = (subj.totals.math.answered > 0 ? 1 : 0) + cet4.sessions;
+
+  const keptAchievements = ACHIEVEMENTS.filter((a) => KEEP_ACHIEVEMENTS.has(a.id));
 
   return (
-    <div className="space-y-6 pt-1">
-      {/* 等级卡 */}
+    <div className="space-y-5 pt-1">
+      {/* 顶部用户等级卡 */}
       <section className="rounded-[28px] bg-gradient-to-br from-brand-500 to-grape-600 p-5 text-white shadow-card">
         <div className="flex items-center gap-4">
           <div className="grid h-20 w-20 shrink-0 place-items-center rounded-3xl bg-white/20">
@@ -52,8 +96,10 @@ export default function Stats() {
             <span className="text-3xl font-black leading-none">{info.level}</span>
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-lg font-black">{info.title}</p>
-            <p className="text-xs text-white/85">累计 {stats.totalXp} XP</p>
+            <p className="truncate text-lg font-black">{user?.display_name || info.title}</p>
+            <p className="truncate text-xs text-white/85">
+              {user?.email ? user.email : `累计 ${stats.totalXp} XP`}
+            </p>
             <div className="mt-2">
               <ProgressBar
                 value={info.ratio}
@@ -67,16 +113,119 @@ export default function Stats() {
             </div>
           </div>
         </div>
+
+        <div className="mt-4 flex gap-2">
+          {user ? (
+            <button
+              onClick={logout}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl bg-white/20 py-2.5 text-xs font-black active:bg-white/30"
+            >
+              <LogOut size={14} strokeWidth={3} /> 退出登录
+            </button>
+          ) : (
+            <button
+              onClick={() => nav('/login')}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl bg-white py-2.5 text-xs font-black text-brand-600 active:opacity-90"
+            >
+              <LogIn size={14} strokeWidth={3} /> 登录 / 注册
+            </button>
+          )}
+        </div>
       </section>
 
-      {/* AI 解析开关 */}
+      {/* 练习数据总览 */}
       <section>
-        <SectionTitle
-          action={<span className="text-xs font-black text-ink-faint">数学 / 计算机</span>}
-        >
+        <SectionTitle>练习数据总览</SectionTitle>
+        <div className="grid grid-cols-2 gap-3">
+          <Metric
+            icon={<ClipboardList size={16} strokeWidth={3} />}
+            value={answered}
+            label="总做题数"
+            tone="text-brand-600"
+          />
+          <Metric
+            icon={<TrendingUp size={16} strokeWidth={3} />}
+            value={answered ? `${accuracy}%` : '—'}
+            label="总正确率"
+            tone="text-mint-600"
+          />
+          <Metric
+            icon={<Flame size={16} strokeWidth={3} />}
+            value={streak}
+            label="连续打卡"
+            tone="text-coral-500"
+          />
+          <Metric
+            icon={<Target size={16} strokeWidth={3} />}
+            value={wrongTotal}
+            label="错题总数"
+            tone="text-sun-600"
+          />
+          <Metric
+            icon={<Award size={16} strokeWidth={3} />}
+            value={mastered}
+            label="掌握知识点"
+            tone="text-grape-500"
+          />
+          <Metric
+            icon={<Trophy size={16} strokeWidth={3} />}
+            value={mockCount}
+            label="模拟次数"
+            tone="text-brand-600"
+          />
+        </div>
+      </section>
+
+      {/* 三科进度 */}
+      <section>
+        <SectionTitle>各科进度</SectionTitle>
+        <div className="space-y-2">
+          <SubjectRow
+            icon={<Sigma size={17} strokeWidth={2.6} />}
+            tone="from-brand-500 to-grape-600"
+            name="高等数学"
+            answered={subj.totals.math.answered}
+            total={MATH_TOTAL}
+            accuracy={
+              subj.totals.math.answered
+                ? Math.round((subj.totals.math.correct / subj.totals.math.answered) * 100)
+                : null
+            }
+            onClick={() => nav('/math')}
+          />
+          <SubjectRow
+            icon={<Target size={17} strokeWidth={2.6} />}
+            tone="from-mint-500 to-mint-600"
+            name="计算机基础"
+            answered={subj.totals.cs.answered}
+            total={CS_TOTAL}
+            accuracy={
+              subj.totals.cs.answered
+                ? Math.round((subj.totals.cs.correct / subj.totals.cs.answered) * 100)
+                : null
+            }
+            onClick={() => nav('/cs')}
+          />
+          <SubjectRow
+            icon={<GraduationCap size={17} strokeWidth={2.6} />}
+            tone="from-brand-400 to-brand-600"
+            name="英语（四级）"
+            answered={cet4.answered}
+            total={0}
+            accuracy={
+              cet4.answered ? Math.round((cet4.correct / cet4.answered) * 100) : null
+            }
+            onClick={() => nav('/cet4')}
+          />
+        </div>
+      </section>
+
+      {/* AI 讲解开关：没有任何接口配置入口 */}
+      <section>
+        <SectionTitle action={<span className="text-xs font-black text-ink-faint">数学 / 计算机</span>}>
           AI 解析
         </SectionTitle>
-        <div className="card space-y-3 p-4">
+        <div className="card p-4">
           <div className="flex items-start gap-3">
             <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-grape-500 to-brand-500 text-white">
               <Bot size={18} strokeWidth={2.6} />
@@ -84,8 +233,7 @@ export default function Stats() {
             <div className="min-w-0 flex-1">
               <p className="text-sm font-black text-ink">刷题时显示 AI 讲解</p>
               <p className="mt-0.5 text-[11px] leading-relaxed text-ink-faint">
-                开启后，数学与计算机的答题页会出现「让 AI 讲讲这道题」按钮。
-                题库本身已自带分步解析，这里是可选增强——答错时让 AI 换个角度讲一遍。
+                开启后答题页会出现「让 AI 讲讲这道题」。题库自带分步解析，这里是可选增强。
               </p>
             </div>
             <button
@@ -106,32 +254,10 @@ export default function Stats() {
               />
             </button>
           </div>
-
-          {aiExplain && !aiReady && (
-            <div className="rounded-2xl bg-sun-50 px-3 py-2.5">
-              <p className="text-[11px] font-bold leading-relaxed text-sun-700">
-                还没配置 AI 接口，AI 解析暂时用不了。去设置里填一个 OpenAI 兼容的地址和 Key 就能用。
-              </p>
-            </div>
-          )}
-
-          <button
-            onClick={() => nav('/settings')}
-            className="flex w-full items-center gap-2.5 rounded-2xl bg-ink/4 px-3.5 py-3 text-left active:bg-ink/8"
-          >
-            <Settings2 size={17} className="shrink-0 text-ink-soft" strokeWidth={2.6} />
-            <span className="min-w-0 flex-1">
-              <span className="block text-[13px] font-black text-ink">AI 接口设置</span>
-              <span className="mt-0.5 block truncate text-[11px] text-ink-faint">
-                {aiReady ? `已配置 · ${ai.model}` : '未配置 · 点这里填写地址与 Key'}
-              </span>
-            </span>
-            <ChevronRight size={17} className="shrink-0 text-ink-faint" strokeWidth={2.6} />
-          </button>
         </div>
       </section>
 
-      {/* 试卷上传 + 公式本 */}
+      {/* 学习工具 */}
       <section>
         <SectionTitle>学习工具</SectionTitle>
         <div className="space-y-2">
@@ -144,7 +270,7 @@ export default function Stats() {
             </span>
             <span className="min-w-0 flex-1">
               <span className="block text-[13px] font-black text-ink">上传试卷 · AI 解析</span>
-              <span className="mt-0.5 block text-[11px] text-ink-faint">
+              <span className="mt-0.5 block truncate text-[11px] text-ink-faint">
                 传 PDF 或拍照，拆出题目、公式与技巧
               </span>
             </span>
@@ -167,7 +293,7 @@ export default function Stats() {
                   </span>
                 )}
               </span>
-              <span className="mt-0.5 block text-[11px] text-ink-faint">
+              <span className="mt-0.5 block truncate text-[11px] text-ink-faint">
                 自动去重，按考纲顺序排列
               </span>
             </span>
@@ -176,98 +302,25 @@ export default function Stats() {
         </div>
       </section>
 
-      {/* 数据 */}
-      <section>
-        <SectionTitle>练习数据</SectionTitle>
-        <div className="grid grid-cols-2 gap-3">
-          <Metric icon={<Mic2 size={16} strokeWidth={3} />} value={stats.sentencesSpoken} label="开口句数" tone="text-brand-600" />
-          <Metric icon={<TrendingUp size={16} strokeWidth={3} />} value={stats.perfectScores} label="90 分以上" tone="text-mint-600" />
-          <Metric icon={<Flame size={16} strokeWidth={3} />} value={streak} label="连续天数" tone="text-coral-500" />
-          <Metric icon={<Sword size={16} strokeWidth={3} />} value={stats.bossCleared} label="击败 BOSS" tone="text-grape-500" />
-          <Metric icon={<Sparkles size={16} strokeWidth={3} />} value={stats.wordsLearned.length} label="掌握词汇" tone="text-sun-600" />
-          <Metric icon={<Timer size={16} strokeWidth={3} />} value={formatMinutes(stats.minutesSpoken)} label="开口时长" tone="text-ink" />
-        </div>
-      </section>
-
-      {/* 闯关进度 */}
+      {/* 通用成就 */}
       <section>
         <SectionTitle
           action={
             <span className="text-xs font-black text-ink-faint">
-              {cleared}/{ALL_LEVELS.length} 关 · {totalStars} 星
-            </span>
-          }
-        >
-          闯关进度
-        </SectionTitle>
-        <div className="card space-y-3 p-4">
-          {WORLDS.map((w) => {
-            const c = w.levels.filter((l) => progress[l.id]?.cleared).length;
-            return (
-              <div key={w.id}>
-                <div className="mb-1 flex justify-between text-xs font-bold text-ink-soft">
-                  <span>
-                    {w.emoji} {w.name}
-                  </span>
-                  <span>
-                    {c}/{w.levels.length}
-                  </span>
-                </div>
-                <ProgressBar value={c / w.levels.length} barClass="bg-sun-500" height="h-2" />
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* 打卡 */}
-      <section>
-        <SectionTitle>最近 14 天</SectionTitle>
-        <div className="card p-4">
-          <div className="flex justify-between gap-1">
-            {Array.from({ length: 14 }).map((_, i) => {
-              const d = new Date();
-              d.setDate(d.getDate() - (13 - i));
-              const key = todayKey(d);
-              const on = stats.practiceDays.includes(key);
-              return (
-                <div key={key} className="flex flex-col items-center gap-1">
-                  <span
-                    className={clsx(
-                      'h-7 w-7 rounded-lg',
-                      on ? 'bg-mint-500' : 'bg-ink/8',
-                      key === todayKey() && !on && 'ring-2 ring-brand-300',
-                    )}
-                  />
-                  <span className="text-[9px] font-bold text-ink-faint">{d.getDate()}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* 成就 */}
-      <section>
-        <SectionTitle
-          action={
-            <span className="text-xs font-black text-ink-faint">
-              {achievements.length}/{ACHIEVEMENTS.length}
+              {keptAchievements.filter((a) => achievements.includes(a.id)).length}/
+              {keptAchievements.length}
             </span>
           }
         >
           成就徽章
         </SectionTitle>
         <div className="grid grid-cols-2 gap-3">
-          {ACHIEVEMENTS.map((a) => {
+          {keptAchievements.map((a) => {
             const got = achievements.includes(a.id);
             return (
               <div
                 key={a.id}
-                className={clsx(
-                  'card flex items-center gap-3 p-3',
-                  got ? '' : 'opacity-45 grayscale',
-                )}
+                className={clsx('card flex items-center gap-3 p-3', got ? '' : 'opacity-45 grayscale')}
               >
                 <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-ink/5 text-xl">
                   {a.emoji}
@@ -289,26 +342,29 @@ export default function Stats() {
             <p className="text-sm font-black text-coral-600">确定清空全部进度？</p>
             <p className="text-xs text-ink-soft">经验、星星、成就、打卡记录都会消失，且无法恢复。</p>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => setConfirmReset(false)}>
+              <button
+                onClick={() => setConfirmReset(false)}
+                className="flex-1 rounded-2xl border-2 border-ink/10 py-2.5 text-sm font-black text-ink-soft"
+              >
                 取消
-              </Button>
-              <Button
-                variant="coral"
-                size="sm"
+              </button>
+              <button
                 onClick={() => {
                   resetProfile();
                   setConfirmReset(false);
                 }}
+                className="flex-1 rounded-2xl bg-coral-500 py-2.5 text-sm font-black text-white"
               >
                 确认清空
-              </Button>
+              </button>
             </div>
           </div>
         ) : (
           <button
             onClick={() => setConfirmReset(true)}
-            className="w-full rounded-2xl bg-white py-3 text-sm font-black text-coral-600 shadow-pop-sm btn-pop"
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-3 text-sm font-black text-coral-600 shadow-pop-sm btn-pop"
           >
+            <UserRound size={15} strokeWidth={2.6} />
             清空练习数据
           </button>
         )}
@@ -338,5 +394,58 @@ function Metric({
         <p className="truncate text-[11px] font-bold text-ink-faint">{label}</p>
       </div>
     </div>
+  );
+}
+
+/** 单个科目的进度行 */
+function SubjectRow({
+  icon,
+  tone,
+  name,
+  answered,
+  total,
+  accuracy,
+  onClick,
+}: {
+  icon: ReactNode;
+  tone: string;
+  name: string;
+  answered: number;
+  total: number;
+  accuracy: number | null;
+  onClick: () => void;
+}) {
+  const ratio = total > 0 ? Math.min(1, answered / total) : 0;
+  return (
+    <button
+      onClick={onClick}
+      className="flex w-full items-center gap-3 rounded-2xl bg-white px-3.5 py-3 text-left shadow-pop-sm active:bg-ink/3"
+    >
+      <span
+        className={`grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-gradient-to-br ${tone} text-white`}
+      >
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-baseline gap-2">
+          <span className="text-[13px] font-black text-ink">{name}</span>
+          <span className="ml-auto shrink-0 text-[11px] font-bold text-ink-faint">
+            {total > 0 ? `${answered}/${total}` : `${answered} 题`}
+          </span>
+          {accuracy !== null && (
+            <span className="shrink-0 text-[11px] font-black text-mint-600">{accuracy}%</span>
+          )}
+        </span>
+        {total > 0 && (
+          <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-ink/8">
+            <span
+              className="block h-full rounded-full bg-brand-500 transition-all"
+              style={{ width: `${ratio * 100}%` }}
+            />
+          </span>
+        )}
+      </span>
+      <ChevronRight size={17} className="shrink-0 text-ink-faint" strokeWidth={2.6} />
+    </button>
   );
 }

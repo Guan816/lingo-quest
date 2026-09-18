@@ -258,10 +258,10 @@ function McqPlay({ mode, title }: { mode: PlayMode; title: string }) {
               variant="ghost"
               size="sm"
               icon={<Wand2 size={15} strokeWidth={3} />}
-              disabled={aiBusy || !ai.enabled}
+              disabled={aiBusy}
               onClick={aiGenerate}
             >
-              {aiBusy ? '正在出题…' : ai.enabled ? 'AI 再出几道' : 'AI 未配置'}
+              {aiBusy ? '正在出题…' : 'AI 再出几道'}
             </Button>
           </div>
           {aiMsg && <p className="text-xs text-ink-faint">{aiMsg}</p>}
@@ -528,16 +528,13 @@ function WritingPlay({ mode, title }: { mode: 'translation' | 'writing'; title: 
         </Button>
         <Button
           variant="grape"
-          disabled={busy || !ai.enabled || !answer.trim()}
+          disabled={busy || !answer.trim()}
           icon={busy ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} strokeWidth={3} />}
           onClick={askAi}
         >
           {busy ? '批改中…' : 'AI 批改'}
         </Button>
       </div>
-      {!ai.enabled && (
-        <p className="mt-2 text-center text-xs text-ink-faint">配置 AI 接口后可由 AI 按四级标准批改</p>
-      )}
 
       {feedback && (
         <Card className="mt-3 border-l-4 border-grape-500">

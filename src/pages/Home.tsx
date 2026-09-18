@@ -1,259 +1,273 @@
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, Flame, GraduationCap, Headphones, Mic2, Play, Sparkles } from 'lucide-react';
-import { Button, Chip, ProgressBar, SectionTitle } from '../components/ui';
+import {
+  BookMarked,
+  ChevronRight,
+  ClipboardList,
+  Flame,
+  GraduationCap,
+  Settings,
+  Sigma,
+  Target,
+  TrendingUp,
+  Upload,
+} from 'lucide-react';
+import { SectionTitle } from '../components/ui';
+import { levelInfo } from '../lib/gamification';
 import { useProfileStore, useTodayXp } from '../store/useProfileStore';
 import { useCet4Store, pendingWrongCount } from '../store/useCet4Store';
-import { ALL_LEVELS, getLevel } from '../data/curriculum';
-import { ACHIEVEMENTS } from '../data/achievements';
-import { levelInfo } from '../lib/gamification';
-import { streakOf, todayKey } from '../lib/utils';
-import { asrSupported } from '../lib/speech';
+import { useFormulaBookStore } from '../store/useFormulaBookStore';
+import { useSubjectStore } from '../store/useSubjectStore';
+import { MATH_TOTAL } from '../data/math';
+import { CS_TOTAL } from '../data/cs';
+import { CET4_QUESTIONS } from '../data/cet4';
+import { streakOf } from '../lib/utils';
 
-const QUICK_GAMES = [
+/** 三个科目的入口卡（信息密度一致，视觉只用主色调区分） */
+const SUBJECTS = [
   {
-    to: '/games/listen',
-    name: '听音选词',
-    desc: '耳朵先动起来',
-    emoji: '🎧',
-    tone: 'from-brand-400 to-brand-600',
+    to: '/math',
+    name: '高等数学',
+    desc: '微积分 80% + 线代 20%',
+    total: MATH_TOTAL,
+    icon: Sigma,
+    /** 数学用蓝紫 */
+    grad: 'from-brand-500 to-grape-600',
+    soft: 'bg-brand-50',
+    ink: 'text-brand-600',
   },
   {
-    to: '/games/build',
-    name: '拼句挑战',
-    desc: '打乱的词块归位',
-    emoji: '🧩',
-    tone: 'from-grape-400 to-grape-600',
+    to: '/cs',
+    name: '计算机基础',
+    desc: '课程 A 60% + 课程 B 40%',
+    total: CS_TOTAL,
+    icon: Target,
+    /** 计算机用绿 */
+    grad: 'from-mint-500 to-mint-600',
+    soft: 'bg-mint-50',
+    ink: 'text-mint-600',
   },
   {
-    to: '/games/shadow',
-    name: '影子跟读',
-    desc: '一句一句磨发音',
-    emoji: '🎤',
-    tone: 'from-coral-400 to-coral-600',
+    to: '/cet4',
+    name: '英语（四级）',
+    desc: '听力 35% + 阅读 35%',
+    total: CET4_QUESTIONS.length,
+    icon: GraduationCap,
+    /** 英语用蓝 */
+    grad: 'from-brand-400 to-brand-600',
+    soft: 'bg-brand-50',
+    ink: 'text-brand-600',
   },
-  {
-    to: '/games/talk',
-    name: '自由对话',
-    desc: '和 AI 角色闲聊',
-    emoji: '💬',
-    tone: 'from-mint-400 to-mint-600',
-  },
-];
+] as const;
 
 export default function Home() {
   const nav = useNavigate();
-  const progress = useProfileStore((s) => s.progress);
+
   const stats = useProfileStore((s) => s.stats);
-  const achievements = useProfileStore((s) => s.achievements);
-  const dailyGoal = useProfileStore((s) => s.dailyGoal);
   const xp = useProfileStore((s) => s.xp);
-  const todaySentences = useProfileStore((s) => s.todaySentences);
-  const todayDate = useProfileStore((s) => s.todayDate);
+  const cet4 = useCet4Store();
+  const subj = useSubjectStore();
+  const formulaTotal = useFormulaBookStore((s) => s.entries.length);
   const todayXp = useTodayXp();
 
-  const nextLevel = ALL_LEVELS.find((l) => !progress[l.id]?.cleared) ?? ALL_LEVELS[0];
-  const nextCtx = getLevel(nextLevel.id);
   const info = levelInfo(xp);
   const streak = streakOf(stats.practiceDays);
-  const sentencesToday = todayDate === todayKey() ? todaySentences : 0;
-  const unlocked = ACHIEVEMENTS.filter((a) => achievements.includes(a.id));
-  const pendingWrong = useCet4Store((s) => pendingWrongCount(s.wrong));
+
+  /** 三科合计的做题数与正确率 —— 首页只报一个总盘子 */
+  const answered = subj.totals.math.answered + subj.totals.cs.answered + cet4.answered;
+  const correct = subj.totals.math.correct + subj.totals.cs.correct + cet4.correct;
+  const accuracy = answered > 0 ? Math.round((correct / answered) * 100) : 0;
+  const wrongTotal = subj.wrong.length + pendingWrongCount(cet4.wrong);
 
   return (
-    <div className="space-y-6 pt-1">
-      {/* 主 CTA：永远只有一个最该做的事 */}
-      <section
-        className={`relative overflow-hidden rounded-[28px] bg-gradient-to-br ${nextCtx?.world.gradient ?? 'from-brand-400 to-brand-600'} p-5 text-white shadow-card`}
-      >
-        <div className="relative z-10">
-          <Chip tone="gray" className="mb-3 bg-white/25 text-white">
-            {nextCtx ? `第 ${nextLevel.order} 关 · ${nextCtx.world.name}` : '继续'}
-          </Chip>
-          <h1 className="text-balance text-2xl font-black leading-tight">
-            {nextLevel.title}
-          </h1>
-          <p className="mt-1 text-sm text-white/85">
-            {nextLevel.kind === 'boss' ? 'BOSS 战 · 自由对话 6 轮' : '约 2 分钟 · 开口就能拿经验'}
-          </p>
-          <Button
-            variant="ghost"
-            size="md"
-            className="mt-4 bg-white text-ink shadow-pop-sm"
-            icon={<Play size={18} strokeWidth={3} fill="currentColor" />}
-            onClick={() => nav(`/play/${nextLevel.id}`)}
-          >
-            开始闯关
-          </Button>
-        </div>
-        <Sparkles
-          className="absolute -right-4 -top-4 h-28 w-28 text-white/15"
-          strokeWidth={1.5}
-        />
-      </section>
-
-      {/* 今日进度 */}
-      <section className="card p-4">
-        <SectionTitle
-          action={
-            <span className="text-xs font-black text-ink-faint">
-              Lv.{info.level} · {info.title}
-            </span>
-          }
-        >
-          今日进度
-        </SectionTitle>
-        <div className="space-y-3">
-          <div>
-            <div className="mb-1 flex justify-between text-xs font-bold text-ink-soft">
-              <span>经验值</span>
-              <span>
-                {todayXp} / {dailyGoal}
-              </span>
-            </div>
-            <ProgressBar value={todayXp / Math.max(1, dailyGoal)} striped />
-          </div>
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <Stat icon={<Mic2 size={15} strokeWidth={3} />} value={sentencesToday} label="今日开口" />
-            <Stat
-              icon={<Flame size={15} strokeWidth={3} />}
-              value={streak}
-              label="连续天数"
-              tone="text-coral-500"
-            />
-            <Stat
-              icon={<Sparkles size={15} strokeWidth={3} />}
-              value={unlocked.length}
-              label="成就徽章"
-              tone="text-sun-600"
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* 四级备考入口 */}
-      <section>
-        <SectionTitle
-          action={
-            <button
-              onClick={() => nav('/cet4')}
-              className="flex items-center gap-0.5 text-xs font-black text-brand-600"
-            >
-              进入四级 <ChevronRight size={14} strokeWidth={3} />
-            </button>
-          }
-        >
-          四级备考
-        </SectionTitle>
+    <div className="space-y-5 pt-1">
+      {/* 顶部用户栏：等级 · 今日 XP · 设置 */}
+      <section className="flex items-center gap-3">
         <button
-          onClick={() => nav('/cet4')}
-          className="btn-pop relative w-full overflow-hidden rounded-3xl bg-gradient-to-br from-grape-500 to-brand-600 p-4 text-left text-white shadow-card"
+          onClick={() => nav('/stats')}
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-3xl bg-white p-3.5 text-left shadow-pop-sm active:bg-ink/3"
         >
-          <div className="relative z-10">
-            <p className="text-base font-black">0 基础，冲着 425 分去</p>
-            <p className="mt-0.5 text-xs text-white/85">
-              听力 · 阅读 · 翻译 · 写作，按四级真题题型练
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-bold">
-              <span className="rounded-full bg-white/20 px-2.5 py-1">🎲 考官随机抽题</span>
-              <span className="rounded-full bg-white/20 px-2.5 py-1">
-                📕 错题本{pendingWrong > 0 ? ` ${pendingWrong}` : ''}
-              </span>
-            </div>
-          </div>
-          <GraduationCap
-            className="absolute -bottom-4 -right-4 h-24 w-24 text-white/15"
-            strokeWidth={1.5}
-          />
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-grape-600 text-white">
+            <span className="text-[9px] font-black leading-none opacity-80">LV</span>
+            <span className="text-base font-black leading-none">{info.level}</span>
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-black text-ink">{info.title}</span>
+            <span className="mt-0.5 block text-[11px] font-bold text-ink-faint">
+              今日 +{todayXp} XP · 累计 {xp} XP
+            </span>
+          </span>
+          <ChevronRight size={17} className="shrink-0 text-ink-faint" strokeWidth={2.6} />
+        </button>
+
+        <button
+          onClick={() => nav('/settings')}
+          aria-label="设置"
+          className="grid h-[62px] w-[62px] shrink-0 place-items-center rounded-3xl bg-white text-ink-soft shadow-pop-sm active:bg-ink/3"
+        >
+          <Settings size={21} strokeWidth={2.6} />
         </button>
       </section>
 
-      {/* 快捷玩法 */}
+      {/* 今日学习概览 */}
       <section>
-        <SectionTitle
-          action={
-            <button
-              onClick={() => nav('/games')}
-              className="flex items-center gap-0.5 text-xs font-black text-brand-600"
+        <SectionTitle>今日学习概览</SectionTitle>
+        <div className="card grid grid-cols-2 gap-2 p-3">
+          <Overview
+            icon={<ClipboardList size={15} strokeWidth={3} />}
+            value={answered}
+            label="做题数"
+            tone="text-brand-600"
+          />
+          <Overview
+            icon={<TrendingUp size={15} strokeWidth={3} />}
+            value={answered ? `${accuracy}%` : '—'}
+            label="总正确率"
+            tone="text-mint-600"
+          />
+          <Overview
+            icon={<Flame size={15} strokeWidth={3} />}
+            value={streak}
+            label="连续打卡"
+            tone="text-coral-500"
+          />
+          <Overview
+            icon={<Target size={15} strokeWidth={3} />}
+            value={wrongTotal}
+            label="错题数"
+            tone="text-sun-600"
+          />
+        </div>
+      </section>
+
+      {/* 三科入口 */}
+      <section className="space-y-2.5">
+        <SectionTitle>开始刷题</SectionTitle>
+        {SUBJECTS.map((s) => (
+          <button
+            key={s.to}
+            onClick={() => nav(s.to)}
+            className="btn-pop flex w-full items-center gap-3.5 rounded-3xl bg-white p-4 text-left shadow-card"
+          >
+            <span
+              className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br ${s.grad} text-white`}
             >
-              全部玩法 <ChevronRight size={14} strokeWidth={3} />
-            </button>
+              <s.icon size={22} strokeWidth={2.6} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-base font-black text-ink">{s.name}</span>
+              <span className="mt-0.5 block truncate text-[11px] text-ink-faint">{s.desc}</span>
+              <span className={`mt-1 inline-block rounded-full ${s.soft} px-2 py-0.5 text-[10px] font-black ${s.ink}`}>
+                题库 {s.total} 题
+              </span>
+            </span>
+            <span className="flex shrink-0 items-center gap-0.5 text-xs font-black text-brand-600">
+              进入
+              <ChevronRight size={14} strokeWidth={3} />
+            </span>
+          </button>
+        ))}
+      </section>
+
+      {/* 快捷工具 */}
+      <section className="space-y-2.5">
+        <SectionTitle>快捷工具</SectionTitle>
+
+        <ToolRow
+          icon={<ClipboardList size={18} strokeWidth={2.6} />}
+          tone="from-coral-400 to-coral-600"
+          title="错题本"
+          desc={
+            wrongTotal > 0 ? `${wrongTotal} 道待订正，按科目分类` : '答错的题自动收进来'
           }
-        >
-          玩着学
-        </SectionTitle>
-        <div className="grid grid-cols-2 gap-3">
-          {QUICK_GAMES.map((g) => (
-            <button
-              key={g.to}
-              onClick={() => nav(g.to)}
-              className="btn-pop overflow-hidden rounded-3xl bg-white text-left shadow-card"
-            >
-              <div className={`grid h-16 place-items-center bg-gradient-to-br ${g.tone} text-3xl`}>
-                {g.emoji}
-              </div>
-              <div className="p-3">
-                <p className="text-sm font-black text-ink">{g.name}</p>
-                <p className="text-xs text-ink-faint">{g.desc}</p>
-              </div>
-            </button>
-          ))}
-        </div>
-      </section>
+          badge={wrongTotal > 0 ? wrongTotal : undefined}
+          onClick={() => nav('/cet4/wrong')}
+        />
 
-      {/* 成就墙 */}
-      <section>
-        <SectionTitle>成就徽章</SectionTitle>
-        <div className="card flex flex-wrap gap-2 p-4">
-          {unlocked.length === 0 ? (
-            <p className="text-sm text-ink-faint">还没解锁徽章，开口说第一句就有了 🐣</p>
-          ) : (
-            unlocked.map((a) => (
-              <div
-                key={a.id}
-                className="flex items-center gap-2 rounded-2xl bg-ink/5 py-1.5 pl-2 pr-3"
-              >
-                <span className="text-lg">{a.emoji}</span>
-                <span className="text-xs font-black text-ink">{a.name}</span>
-              </div>
-            ))
-          )}
-        </div>
-      </section>
+        <ToolRow
+          icon={<Upload size={18} strokeWidth={2.6} />}
+          tone="from-grape-500 to-brand-500"
+          title="上传试卷 · AI 解析"
+          desc="传 PDF 或拍照，拆出题目、公式与技巧"
+          onClick={() => nav('/paper/math')}
+        />
 
-      {!asrSupported() && (
-        <div className="card flex items-start gap-3 border-l-4 border-sun-500 p-4">
-          <Headphones size={20} className="mt-0.5 shrink-0 text-sun-600" strokeWidth={2.6} />
-          <p className="text-xs leading-relaxed text-ink-soft">
-            当前浏览器不支持语音识别，应用会自动切换到
-            <b className="text-ink"> 打字模式</b>：你输入自己打算说的句子，照样能打分、拿经验、闯关。
-          </p>
-        </div>
-      )}
+        <ToolRow
+          icon={<BookMarked size={18} strokeWidth={2.6} />}
+          tone="from-sun-500 to-coral-500"
+          title="公式本 · 技巧本"
+          desc="自动去重，按考纲顺序排好"
+          badge={formulaTotal > 0 ? formulaTotal : undefined}
+          onClick={() => nav('/formulas')}
+        />
+      </section>
 
       <div className="h-2" />
     </div>
   );
 }
 
-function Stat({
+/** 今日概览里的一个数据格 */
+function Overview({
   icon,
   value,
   label,
-  tone = 'text-brand-600',
+  tone,
 }: {
   icon: ReactNode;
-  value: number;
+  value: number | string;
   label: string;
-  tone?: string;
+  tone: string;
 }) {
   return (
-    <div className="rounded-2xl bg-ink/[0.04] py-2.5">
-      <div className={`flex items-center justify-center gap-1 text-lg font-black ${tone}`}>
+    <div className="rounded-2xl bg-ink/[0.04] px-3 py-2.5">
+      <div className={`flex items-center gap-1.5 ${tone}`}>
         {icon}
-        {value}
+        <span className="text-xl font-black leading-none">{value}</span>
       </div>
-      <p className="mt-0.5 text-[11px] font-bold text-ink-faint">{label}</p>
+      <p className="mt-1 text-[11px] font-bold text-ink-faint">{label}</p>
     </div>
+  );
+}
+
+/** 快捷工具行 */
+function ToolRow({
+  icon,
+  tone,
+  title,
+  desc,
+  badge,
+  onClick,
+}: {
+  icon: ReactNode;
+  tone: string;
+  title: string;
+  desc: string;
+  badge?: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex w-full items-center gap-3 rounded-2xl bg-white px-3.5 py-3 text-left shadow-pop-sm active:bg-ink/3"
+    >
+      <span
+        className={`grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-gradient-to-br ${tone} text-white`}
+      >
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5">
+          <span className="text-[13px] font-black text-ink">{title}</span>
+          {badge !== undefined && (
+            <span className="rounded-full bg-coral-100 px-1.5 py-0.5 text-[10px] font-black text-coral-600">
+              {badge}
+            </span>
+          )}
+        </span>
+        <span className="mt-0.5 block truncate text-[11px] text-ink-faint">{desc}</span>
+      </span>
+      <ChevronRight size={17} className="shrink-0 text-ink-faint" strokeWidth={2.6} />
+    </button>
   );
 }

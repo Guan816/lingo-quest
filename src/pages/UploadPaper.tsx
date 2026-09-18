@@ -40,7 +40,6 @@ export default function UploadPaper() {
   const subject: Subject = params.subject === 'cs' ? 'cs' : 'math';
 
   const ai = useSettingsStore((s) => s.ai);
-  const aiReady = ai.enabled;
   const addFormulas = useFormulaBookStore((s) => s.addMany);
   const subjectStore = useSubjectStore();
   const clearLevel = useProfileStore((s) => s.clearLevel);
@@ -98,16 +97,6 @@ export default function UploadPaper() {
     }
 
     setFileName(`${file.name}（${formatSize(file.size)}）`);
-
-    // 文件已经拿到手了，只是缺 AI 配置。
-    // 这时候要说清楚「文件没问题、缺的是什么」，而不是让用户以为上传坏了。
-    if (!aiReady) {
-      setErr(
-        '文件已经选好了，但试卷解析要靠大模型，需要先配置 AI 接口。'
-        + '点下面的「去配置」填好地址和 Key，再回来重新选一次就能用。',
-      );
-      return;
-    }
 
     setStage('working');
 
@@ -223,25 +212,6 @@ export default function UploadPaper() {
         </div>
       )}
 
-      {/* 未配置 AI 的提示 */}
-      {!aiReady && (
-        <Card className="border-l-4 border-sun-500">
-          <div className="flex items-start gap-3">
-            <AlertCircle size={19} className="mt-0.5 shrink-0 text-sun-600" strokeWidth={2.6} />
-            <div className="flex-1 text-xs leading-relaxed text-ink-soft">
-              <p className="mb-1 text-sm font-black text-ink">先配好 AI 接口才能解析</p>
-              试卷解析靠大模型完成。到「我的 → AI 接口设置」填入 OpenAI 兼容的地址和 Key 即可。
-              <button
-                onClick={() => nav('/settings')}
-                className="mt-2 block rounded-xl bg-sun-500 px-3 py-1.5 text-[12px] font-black text-white"
-              >
-                去配置
-              </button>
-            </div>
-          </div>
-        </Card>
-      )}
-
       {/* 选择文件 */}
       {stage === 'idle' && (
         <>
@@ -277,11 +247,7 @@ export default function UploadPaper() {
               }}
             />
 
-            {/*
-              按钮**不能**在没配 AI 时禁用 —— 那样点了毫无反应，
-              用户只会觉得「坏了」。让它照常打开选择器，
-              选完文件后再给出「先去配置」的明确指引。
-            */}
+            {/* 点开系统文件选择器；AI 由服务端提供，无需任何配置 */}
             <button
               onClick={() => openPicker('file')}
               className="flex w-full flex-col items-center gap-2 rounded-3xl border-2 border-dashed border-brand-300 bg-brand-50/60 px-5 py-9 text-center transition-colors active:bg-brand-100"

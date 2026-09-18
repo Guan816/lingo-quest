@@ -21,6 +21,7 @@ import {
 import { Button } from './ui';
 import { MathText } from './MathText';
 import { useSettingsStore } from '../store/useSettingsStore';
+import { useProfileStore } from '../store/useProfileStore';
 import {
   explainWithAI,
   gradeObjective,
@@ -52,6 +53,7 @@ export function QuizRunner({ title, subtitle, items, onFinish, onExit }: QuizRun
 
   const ai = useSettingsStore((s) => s.ai);
   const aiExplainOn = useSettingsStore((s) => s.aiExplain);
+  const recordAnswer = useProfileStore((s) => s.recordAnswer);
   const item = items[idx];
 
   const isObjective = useMemo(
@@ -86,6 +88,7 @@ export function QuizRunner({ title, subtitle, items, onFinish, onExit }: QuizRun
     setGraded(g);
     setAnswered((a) => ({ ...a, [item.id]: g.correct }));
     if (g.correct) setCorrectCount((n) => n + 1);
+    recordAnswer(g.correct);
   };
 
   const submitSubjective = () => {
@@ -94,6 +97,7 @@ export function QuizRunner({ title, subtitle, items, onFinish, onExit }: QuizRun
     setGraded(g);
     setAnswered((a) => ({ ...a, [item.id]: g.correct }));
     if (g.correct) setCorrectCount((n) => n + 1);
+    recordAnswer(g.correct);
   };
 
   /** 让用户手动纠正自评结果（主观题的判分只能算辅助） */
@@ -103,6 +107,8 @@ export function QuizRunner({ title, subtitle, items, onFinish, onExit }: QuizRun
     setCorrectCount((n) => n + delta);
     setAnswered((a) => ({ ...a, [item.id]: ok }));
     setGraded({ ...graded, correct: ok, feedback: ok ? '已标记为答对' : '已标记为答错' });
+    // 自评纠正也要跟着改统计，否则错题数与实际对不上
+    recordAnswer(ok);
   };
 
   const runAI = async () => {
@@ -342,21 +348,16 @@ export function QuizRunner({ title, subtitle, items, onFinish, onExit }: QuizRun
               </p>
             )}
 
-            {/* AI 解析：Key 在服务端，前端只看用户自己的开关 */}
+            {/* AI 解析：Key 全在服务端，前端只需要一个按钮，没有任何配置入口 */}
             {aiExplainOn && (
               <div className="border-t border-ink/8 pt-3">
                 {!aiText && !aiBusy && (
                   <button
                     onClick={runAI}
-                    disabled={!ai.enabled}
-                    className={`flex w-full items-center justify-center gap-2 rounded-2xl py-2.5 text-sm font-black ${
-                      ai.enabled
-                        ? 'bg-gradient-to-r from-grape-500 to-brand-500 text-white btn-pop'
-                        : 'bg-ink/8 text-ink-faint'
-                    }`}
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-grape-500 to-brand-500 py-2.5 text-sm font-black text-white btn-pop"
                   >
                     <Sparkles size={15} strokeWidth={2.8} />
-                    {ai.enabled ? '让 AI 讲讲这道题' : '需先在「我的」里打开 AI 开关'}
+                    让 AI 讲讲这道题
                   </button>
                 )}
                 {aiBusy && (

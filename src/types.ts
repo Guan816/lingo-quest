@@ -110,6 +110,10 @@ export interface PlayerStats {
   bossCleared: number;
   comboBest: number;
   minutesSpoken: number;
+  /** 备考模块：累计做过的题数（数学 + 计算机 + 英语） */
+  questionsDone?: number;
+  /** 备考模块：累计答对的题数 */
+  questionsCorrect?: number;
 }
 
 /** 关卡进度 */
@@ -119,14 +123,15 @@ export interface LevelProgress {
   cleared: boolean;
 }
 
-/** AI 配置（OpenAI 兼容） */
 /**
  * AI 相关的**用户偏好**。
  *
- * 注意：这里没有 BaseURL / API Key / 模型名 —— 那些都由服务端持有，
- * 前端不接触密钥。用户只需要决定「开不开 AI」和「要不要联网」。
+ * 【重要】这里没有 BaseURL / API Key / 模型名，以后也不要再加回来 ——
+ * 那些都由服务端持有并自动在多家免费服务商之间故障转移，
+ * 前端只负责发消息。用户不需要（也不应该）接触任何密钥。
  */
 export interface AIConfig {
+  /** 是否启用 AI 增强（讲解 / 解析 / 出题） */
   enabled: boolean;
   /** 接入联网搜索：让模型能查实时信息（新闻、赛事、新词等） */
   webSearch?: boolean;

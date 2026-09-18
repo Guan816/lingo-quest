@@ -309,7 +309,8 @@ function BossPlay({ level, onFinish }: { level: LevelDef; onFinish: (s: number[]
   const [busy, setBusy] = useState(false);
   const scoresRef = useRef<number[]>([]);
   const doneRef = useRef(false);
-  const online = ai.enabled;
+  // AI 由服务端统一提供，用户侧没有开关，永远在线
+  const online = true;
 
   useEffect(() => {
     if (autoSpeak) void speak(boss.opener, { rate: ttsRate });
