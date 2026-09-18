@@ -1,5 +1,6 @@
 import type { AIConfig, Cet4Kind, Cet4Question, Cet4Writing } from '../types';
-import { CET4_QUESTIONS, CET4_WRITINGS, kindMeta } from '../data/cet4';
+import { CET4_WRITINGS, kindMeta } from '../data/cet4';
+import { cet4QuestionsOfKind, allCet4Questions } from './bankMeta';
 import { chatComplete } from './ai';
 import { uid } from './utils';
 
@@ -41,9 +42,11 @@ export const SESSION_SIZE: Record<string, number> = {
 /**
  * 按题型组卷：题目顺序与选项顺序**都会打乱**。
  * 题量不足时有多少出多少（会循环补足，保证每题不重复）。
+ *
+ * 题库走 bankMeta 的合并入口（静态 + 线上），不要直接读 data/cet4 的数组。
  */
 export function buildMcqSession(kind: Cet4Kind, count?: number): McqItem[] {
-  const pool = CET4_QUESTIONS.filter((q) => q.kind === kind);
+  const pool = cet4QuestionsOfKind(kind);
   if (pool.length === 0) return [];
 
   const size = count ?? SESSION_SIZE[kind] ?? Math.min(10, pool.length);
@@ -81,7 +84,7 @@ export const OBJECTIVE_KINDS: Cet4Kind[] = [
  * 考官模式：从全部题型里随机抽题，模拟真实考卷的混排感。
  */
 export function buildMixSession(count = 10): McqItem[] {
-  const pool = CET4_QUESTIONS.filter((q) => OBJECTIVE_KINDS.includes(q.kind));
+  const pool = allCet4Questions().filter((q) => OBJECTIVE_KINDS.includes(q.kind));
   const picked = shuffle(pool).slice(0, Math.min(count, pool.length));
   return picked.map(toItem);
 }
