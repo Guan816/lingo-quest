@@ -23,7 +23,12 @@ import {
   StructureCard,
   SubjectHero,
 } from '../components/SubjectKit';
-import { MATH_CHAPTERS, MATH_QUESTIONS, MATH_KINDS, chapterCount } from '../data/math';
+import { MATH_CHAPTERS, MATH_KINDS } from '../data/math';
+import {
+  allMathQuestions,
+  mathChapterCount,
+} from '../lib/bankMeta';
+import { useQuestionBankStore } from '../store/useQuestionBankStore';
 import { useSubjectStore, subjectStats, pendingWrong } from '../store/useSubjectStore';
 import type { MathChapter } from '../types';
 
@@ -44,7 +49,16 @@ export default function MathPage() {
   const subj = useSubjectStore();
   const [linearOpen, setLinearOpen] = useState(true);
 
-  const counts = useMemo(() => chapterCount(), []);
+  /*
+   * 订阅线上题库，让拉取完成后本页自动重算。
+   *
+   * 只订阅 list 的长度而不是整个 store：题目内容变了不影响本页，
+   * 只有题量变了才需要重渲染。
+   */
+  const bankCount = useQuestionBankStore((s) => s.math.length);
+
+  const counts = useMemo(() => mathChapterCount(), [bankCount]);
+  const totalQuestions = useMemo(() => allMathQuestions().length, [bankCount]);
 
   const calc = MATH_CHAPTERS.filter((c) => !c.linear);
   const linear = MATH_CHAPTERS.filter((c) => c.linear);
@@ -100,7 +114,7 @@ export default function MathPage() {
         stats={[
           { label: '累计答题', value: overall.answered },
           { label: '正确率', value: overall.answered ? `${overall.accuracy}%` : '—' },
-          { label: '已做 / 总题数', value: `${doneTotal}/${MATH_QUESTIONS.length}` },
+          { label: '已做 / 总题数', value: `${doneTotal}/${totalQuestions}` },
         ]}
       />
 
@@ -201,7 +215,7 @@ export default function MathPage() {
       </section>
 
       <p className="pb-2 text-center text-[11px] leading-relaxed text-ink-faint">
-        题库共 {MATH_QUESTIONS.length} 题 · 章节与题型严格对齐省教育厅官方考纲
+        题库共 {totalQuestions} 题 · 章节与题型严格对齐省教育厅官方考纲
       </p>
     </div>
   );
