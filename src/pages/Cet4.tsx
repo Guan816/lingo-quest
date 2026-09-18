@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ChevronDown,
@@ -11,9 +11,11 @@ import {
 } from 'lucide-react';
 import { Button, Card, SectionTitle, StarRow } from '../components/ui';
 import { StructureCard, SubjectHero } from '../components/SubjectKit';
-import { CET4_HOT_WORDS, CET4_KINDS, CET4_QUESTIONS, type Cet4KindMeta } from '../data/cet4';
+import { CET4_HOT_WORDS, CET4_KINDS, type Cet4KindMeta } from '../data/cet4';
+import { allCet4Questions } from '../lib/bankMeta';
 import { useProfileStore } from '../store/useProfileStore';
 import { useCet4Store, pendingWrongCount } from '../store/useCet4Store';
+import { useQuestionBankStore } from '../store/useQuestionBankStore';
 import type { Cet4Kind } from '../types';
 
 const GROUPS: { key: Cet4KindMeta['group']; title: string; hint: string }[] = [
@@ -37,6 +39,10 @@ export default function Cet4() {
   const cet4 = useCet4Store();
   const [wordsOpen, setWordsOpen] = useState(false);
 
+  /** 订阅线上题量，静态题库变化不用管 */
+  const bankCount = useQuestionBankStore((s) => s.cet4.length);
+  const totalQuestions = useMemo(() => allCet4Questions().length, [bankCount]);
+
   const accuracy = cet4.answered > 0 ? Math.round((cet4.correct / cet4.answered) * 100) : 0;
   const pendingWrong = pendingWrongCount(cet4.wrong);
   const starsOf = (kind: Cet4Kind): number =>
@@ -57,7 +63,7 @@ export default function Cet4() {
         stats={[
           { label: '累计答题', value: cet4.answered },
           { label: '正确率', value: cet4.answered ? `${accuracy}%` : '—' },
-          { label: '已做 / 总题数', value: `${doneTotal}/${CET4_QUESTIONS.length}` },
+          { label: '已做 / 总题数', value: `${doneTotal}/${totalQuestions}` },
         ]}
       />
 
