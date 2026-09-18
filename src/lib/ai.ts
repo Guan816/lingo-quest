@@ -60,6 +60,12 @@ export class AIError extends Error {}
 export interface ChatOptions {
   maxTokens?: number;
   temperature?: number;
+  /**
+   * 客户端**不发**这个字段 —— 超时由服务端按请求类型决定
+   * （文本 90s / 读图 120s，见 server/src/services/ai.ts）。
+   * 留在这里只是为了让调用方读起来自解释：写 90000 表示
+   * 「这道请求预计要跑很久」，语义和超时对齐。
+   */
   timeoutMs?: number;
   /** 需要模型读图（试卷解析）时置 true，会走视觉接口 */
   vision?: boolean;
