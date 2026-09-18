@@ -165,4 +165,38 @@ export const api = {
     request('/ai/chat', { method: 'POST', body: JSON.stringify({ messages, ...opts }) }),
   aiVision: (messages: unknown[], opts: Record<string, unknown> = {}) =>
     request('/ai/vision', { method: 'POST', body: JSON.stringify({ messages, ...opts }) }),
+
+  /* ── 题库：拉取线上增量、入库、复核 ── */
+  /** 拉取线上题库（只返回 status='live' 的题） */
+  bankQuestions: (subject?: string, since?: string) => {
+    const qs = new URLSearchParams();
+    if (subject) qs.set('subject', subject);
+    if (since) qs.set('since', since);
+    const q = qs.toString();
+    return request('/bank/questions' + (q ? `?${q}` : ''));
+  },
+  /** 题库概览：各科目各状态的题量 */
+  bankStats: () => request('/bank/stats'),
+  /** 后台：按状态列出题目（含 pending / doubtful / rejected） */
+  bankList: (params: { subject?: string; status?: string; limit?: number; offset?: number }) => {
+    const qs = new URLSearchParams();
+    if (params.subject) qs.set('subject', params.subject);
+    if (params.status) qs.set('status', params.status);
+    if (params.limit != null) qs.set('limit', String(params.limit));
+    if (params.offset != null) qs.set('offset', String(params.offset));
+    return request('/bank/list?' + qs.toString());
+  },
+  /** 后台：批量入库（AI 出题 / 导入的结果落库） */
+  bankIngest: (questions: unknown[], meta: Record<string, unknown> = {}) =>
+    request('/bank/ingest', { method: 'POST', body: JSON.stringify({ questions, ...meta }) }),
+  /** 后台：批量改状态（复核放行 / 驳回） */
+  bankReview: (ids: string[], status: string, note?: string) =>
+    request('/bank/review', { method: 'POST', body: JSON.stringify({ ids, status, note }) }),
+  /** 后台：批量删除 */
+  bankDelete: (ids: string[]) =>
+    request('/bank/delete', { method: 'POST', body: JSON.stringify({ ids }) }),
+  /** 后台：生成/导入记录 */
+  bankLogs: (limit = 50) => request('/bank/logs?limit=' + limit),
+  /** 当前用户是不是管理员 */
+  adminMe: () => request('/bank/admin/me'),
 };
