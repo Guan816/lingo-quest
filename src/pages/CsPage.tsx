@@ -26,13 +26,9 @@ import {
   StructureCard,
   SubjectHero,
 } from '../components/SubjectKit';
-import {
-  CS_CHAPTERS,
-  CS_COURSES,
-  CS_KINDS,
-  CS_QUESTIONS,
-  csChapterCount,
-} from '../data/cs';
+import { CS_CHAPTERS, CS_COURSES, CS_KINDS } from '../data/cs';
+import { allCsQuestions, csChapterCount } from '../lib/bankMeta';
+import { useQuestionBankStore } from '../store/useQuestionBankStore';
 import { pendingWrong, subjectStats, useSubjectStore } from '../store/useSubjectStore';
 import type { CsChapter, CsCourse } from '../types';
 
@@ -70,7 +66,11 @@ export default function CsPage() {
   const subj = useSubjectStore();
   const [active, setActive] = useState<CsCourse>('A');
 
-  const counts = useMemo(() => csChapterCount(), []);
+  /** 订阅线上题库长度，拉取完成后本页自动重算 */
+  const bankCount = useQuestionBankStore((s) => s.cs.length);
+
+  const counts = useMemo(() => csChapterCount(), [bankCount]);
+  const totalQuestions = useMemo(() => allCsQuestions().length, [bankCount]);
   const overall = subjectStats('cs', subj);
   /** 待订正的计算机错题数（错题本入口角标） */
   const csWrong = pendingWrong('cs', subj.wrong);
@@ -100,7 +100,7 @@ export default function CsPage() {
         stats={[
           { label: '累计答题', value: overall.answered },
           { label: '正确率', value: overall.answered ? `${overall.accuracy}%` : '—' },
-          { label: '已做 / 总题数', value: `${doneTotal}/${CS_QUESTIONS.length}` },
+          { label: '已做 / 总题数', value: `${doneTotal}/${totalQuestions}` },
         ]}
       />
 
@@ -241,7 +241,7 @@ export default function CsPage() {
       </section>
 
       <p className="pb-2 text-center text-[11px] leading-relaxed text-ink-faint">
-        题库共 {CS_QUESTIONS.length} 题，按官方考纲原创命制，结构对齐真题
+        题库共 {totalQuestions} 题，按官方考纲原创命制，结构对齐真题
       </p>
     </div>
   );
