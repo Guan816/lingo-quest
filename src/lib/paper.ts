@@ -421,8 +421,13 @@ function buildPrompt(subject: 'math' | 'cs', hasImages: boolean, text: string): 
     .join('\n');
 }
 
-/** 从模型回复里抠出 JSON 对象 */
-function extractJsonObject(text: string): Record<string, unknown> {
+/**
+ * 从模型回复里抠出 JSON 对象。
+ *
+ * 【导出说明】lib/gen.ts（AI 批量出题）也用它，所以从私有改成导出。
+ * 模型偶尔会包一层 markdown 代码块或加前后缀，这里做容错。
+ */
+export function extractJsonObject(text: string): Record<string, unknown> {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const raw = fenced ? fenced[1] : text;
   const start = raw.indexOf('{');
