@@ -334,3 +334,96 @@ export interface CsQuestion {
   tag?: string;
 }
 
+/* ============================================================
+ *  题库扩充 · 线上题库（PostgreSQL）
+ *
+ *  静态题库（data/math.ts 等）是编译进包的「骨架」，
+ *  保证断网也能刷题；下面这个结构是运行时的「增量」，
+ *  由 /api/bank/questions 拉取后与静态题库合并。
+ *
+ *  设计约束（踩过的坑，别改）：
+ *   · 答案存**选项原文**（answerText），不存 A/B/C/D ——
+ *     选项每次显示都打乱，存字母必错。
+ *   · 题目 id 一经入库不可变 —— 错题本 WrongRecord.qid 靠它反查。
+ *   · status='live' 必须人工触发，AI 出的题不自动上线。
+ * ============================================================ */
+
+/** 题目来源 */
+export type QuestionSource = 'ai' | 'paper' | 'import' | 'manual';
+
+/** 题目生命周期状态 */
+export type QuestionStatus = 'pending' | 'passed' | 'doubtful' | 'rejected' | 'live';
+
+/** 线上题库里的一道题（对应 DB 的 questions 表一行） */
+export interface BankQuestion {
+  id: string;
+  subject: 'math' | 'cs' | 'cet4';
+  /** 章节 key；四级用题型 key 充当（news/banked/…） */
+  chapter: string;
+  point: string;
+  /** 数学的 MathKind、计算机的 CsKind、四级无（用 chapter 区分） */
+  kind: string;
+  difficulty: Difficulty;
+  /** 答题模式，驱动前端渲染；四级主观题为 'writing' */
+  mode: QuizItemModeLike;
+
+  stem: string;
+  options?: string[];
+  /** 四级听力/阅读的英文原文 */
+  material?: string;
+
+  /** 标准答案：选择题存选项原文，主观题存最终结论 */
+  answerText: string;
+  /** 正确项下标（多选多项），选项打乱后由 answerText 重算 */
+  answerIdx?: number[];
+  /** 展示用字母，非权威 */
+  answerLetters?: string;
+
+  /** 分步解析：{text, math}，与 lib/explain.ts 的 ExplainStep 一致 */
+  steps: { text: string; math?: string }[];
+  tip?: string;
+  pitfall?: string;
+  formula?: string;
+
+  source: QuestionSource;
+  sourceRef?: string;
+  examYear?: number;
+  paperId?: string;
+
+  status: QuestionStatus;
+  reviewNote?: string;
+  fingerprint: string;
+  createdAt?: string;
+}
+
+/**
+ * 答题模式。
+ *
+ * 这里刻意不 import quiz.ts 的 QuizItemMode —— types.ts 是零依赖的类型真源，
+ * 被 quiz.ts 反向引用，循环 import 会在打包时出问题。
+ * 两处定义保持一致，quiz.ts 侧有编译期断言兜底。
+ */
+export type QuizItemModeLike =
+  | 'single'
+  | 'multi'
+  | 'judge'
+  | 'fill'
+  | 'calc'
+  | 'proof'
+  | 'synthetic'
+  | 'writing';
+
+/** 套卷（对应 DB 的 papers 表一行） */
+export interface BankPaper {
+  id: string;
+  subject: 'math' | 'cs' | 'cet4';
+  title: string;
+  kind: 'real' | 'mock' | 'import';
+  examYear?: number;
+  sourceNote?: string;
+  questionCount: number;
+  totalScore?: number;
+  durationMin?: number;
+  status: 'draft' | 'reviewing' | 'live';
+}
+
