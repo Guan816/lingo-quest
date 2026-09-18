@@ -203,9 +203,20 @@ function tokenize(src: string): Tok[] {
     }
 
     // ── 括号组：整段当一个原子 ──
+    // ⚠️ 但组内还要继续分词！以前直接把整串当成一块死文本，
+    // 于是 `(e^x − 1 − x)` 里的 `^` 永远不会变成上标，
+    // `f(x) = (x² − 1)/(x − 1)` 这种也没法排成分数。
+    // 现在把「左括号 + 组内 token + 右括号」拼成一个完整表达式，
+    // 比分数字段内识别出「(a)/(b)」时才能正确把括号一起拿走。
     const g = readGroup(src, i);
     if (g) {
-      out.push({ k: 'text', v: src.slice(i, g.next) });
+      const inner = tokenize(g.body);
+      const whole: Tok[] = [
+        { k: 'text', v: src[i] },
+        ...inner,
+        { k: 'text', v: src[g.next - 1] },
+      ];
+      out.push(...whole);
       i = g.next;
       continue;
     }
@@ -229,6 +240,13 @@ function tokenize(src: string): Tok[] {
 /**
  * 把 `原子 / 原子` 合并成竖式分数。
  *
+ * ⚠️ 必须容忍斜杠两侧的空格！
+ * 题库里的写法是「(3x² − 2x + 1) / (2x² + 5)」——
+ * 分词器会把两个空格各自拆成独立 token，于是原来的实现拿到的是
+ * 「分子 = 空格、分母 = 空格」，looksMath 判定 false，分数永远合不出来。
+ * 表现就是题干里显示成一行斜杠，纸上那种竖式分数完全没生效。
+ * 这里先把两侧空白跳过去，再判断真正的分子/分母。
+ *
  * 只做一次左到右扫描，`a/b/c` 会变成 (a/b)/c —— 数学上也说得通。
  * 分数是「纸面感」最关键的改进点：斜杠写法在手机上尤其难读。
  */
@@ -236,22 +254,100 @@ function mergeFractions(toks: Tok[]): Tok[] {
   const out: Tok[] = [];
   let i = 0;
 
+  /** 该 token 是不是「无意义的空白占位」 */
+  const isSpace = (t: Tok | undefined): boolean =>
+    !!t && t.k === 'text' && t.v.trim() === '';
+
+  /**
+   * 从下标 idx 起取一个「分数操作数」。
+   *
+   * 分两种：
+   *   1. 以 `(` 开头 → 一直吃到配对的 `)`，整组当一个操作数
+   *      （括号组在分词阶段已经被拆开了，这里要合回去，
+   *        否则 `(x² − 1)/(x − 1)` 的分子会被误认成单个 `)`）
+   *   2. 否则就是一个原子的 token（text/sup/sub/frac/sqrt）
+   *
+   * 返回 [操作数 token 数组, 下一个待处理下标]；取不到返回 null。
+   */
+  const takeOperand = (idx: number, dir: 1 | -1): [Tok[], number] | null => {
+    if (dir === 1) {
+      if (idx >= toks.length) return null;
+      const first = toks[idx];
+      // 情形 1：括号组
+      if (first.k === 'text' && first.v === '(') {
+        let depth = 0;
+        let j = idx;
+        for (; j < toks.length; j++) {
+          const t = toks[j];
+          if (t.k !== 'text') continue;
+          if (t.v.includes('(')) depth++;
+          if (t.v.includes(')')) {
+            depth--;
+            if (depth === 0) return [toks.slice(idx, j + 1), j + 1];
+          }
+        }
+        return null; // 括号不闭合，不冒险
+      }
+      // 情形 2：单个原子
+      if (['text', 'sup', 'sub', 'frac', 'sqrt'].includes(first.k)) {
+        return [[first], idx + 1];
+      }
+      return null;
+    }
+
+    // dir === -1：向左取，只在 out 里找
+    if (idx < 0) return null;
+    const last = out[idx];
+    // 情形 1：以 `)` 结尾 → 向左找到配对的 `(`
+    if (last.k === 'text' && last.v === ')') {
+      let depth = 0;
+      let j = idx;
+      for (; j >= 0; j--) {
+        const t = out[j];
+        if (t.k !== 'text') continue;
+        if (t.v.includes(')')) depth++;
+        if (t.v.includes('(')) {
+          depth--;
+          if (depth === 0) return [out.slice(j, idx + 1), j];
+        }
+      }
+      return null;
+    }
+    if (['text', 'sup', 'sub', 'frac', 'sqrt'].includes(last.k)) {
+      return [[last], idx];
+    }
+    return null;
+  };
+
   while (i < toks.length) {
     const t = toks[i];
 
-    if (t.k === 'text' && t.v === '/' && out.length > 0) {
-      const numTok = out[out.length - 1];
-      const denTok = toks[i + 1];
+    if (t.k === 'text' && t.v === '/') {
+      // ── 向左找分子：跳过空白 ──
+      let li = out.length - 1;
+      while (li >= 0 && isSpace(out[li])) li--;
 
-      // 分子/分母：一个原子，或一个高高瘦瘦的项（上标、根号、分数）
-      const numOk = numTok && (numTok.k === 'text' || numTok.k === 'sup' || numTok.k === 'frac' || numTok.k === 'sqrt');
-      const denOk = denTok && (denTok.k === 'text' || denTok.k === 'sup' || denTok.k === 'frac' || denTok.k === 'sqrt');
+      // ── 向右找分母：跳过空白 ──
+      let ri = i + 1;
+      while (ri < toks.length && isSpace(toks[ri])) ri++;
 
-      if (numOk && denOk && looksMath(numTok, denTok)) {
-        out.pop();
-        out.push({ k: 'frac', num: [numTok], den: [denTok] });
-        i += 2;
-        continue;
+      const left = takeOperand(li, -1);
+      const right = takeOperand(ri, 1);
+
+      if (left && right) {
+        const [numToks, numStart] = left;
+        const [denToks, denEnd] = right;
+        // 用整组内容做「像不像算式」的判断（把非文本 token 当作有值）
+        const probe = (xs: Tok[]): Tok => ({
+          k: 'text',
+          v: xs.map((x) => (x.k === 'text' ? x.v : '1')).join(''),
+        });
+        if (looksMath(probe(numToks), probe(denToks))) {
+          out.length = numStart;
+          out.push({ k: 'frac', num: numToks, den: denToks });
+          i = denEnd;
+          continue;
+        }
       }
     }
 
