@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { QuizRunner } from '../components/QuizRunner';
-import { MATH_CHAPTERS, questionsOfChapter } from '../data/math';
+import { MATH_CHAPTERS } from '../data/math';
+import { allMathQuestions, mathQuestionsOfChapter } from '../lib/bankMeta';
 import { fromMath, pickItems, starsForQuiz, type QuizItem, type QuizItemMode } from '../lib/quiz';
 import { useSubjectStore } from '../store/useSubjectStore';
 import { useProfileStore } from '../store/useProfileStore';
@@ -39,11 +40,11 @@ export default function MathPlay() {
   const [meta, setMeta] = useState({ title: '', subtitle: '' });
 
   useEffect(() => {
-    const all = MATH_CHAPTERS.flatMap((c) => questionsOfChapter(c.key)).map(fromMath);
+    const all = allMathQuestions().map(fromMath);
 
     if (route.type === 'chapter') {
       const ch = MATH_CHAPTERS.find((c) => c.key === route.chapter);
-      const pool = questionsOfChapter(route.chapter).map(fromMath);
+      const pool = mathQuestionsOfChapter(route.chapter).map(fromMath);
       setItems(pickItems(pool, { count: CHAPTER_COUNT }));
       setMeta({
         title: ch?.name ?? '章节练习',
