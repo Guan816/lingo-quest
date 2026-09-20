@@ -20,7 +20,6 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useNavigate } from 'react-router-dom';
-import { ACHIEVEMENTS } from '../data/achievements';
 import { levelInfo } from '../lib/gamification';
 import { streakOf } from '../lib/utils';
 import { useProfileStore } from '../store/useProfileStore';
@@ -36,29 +35,9 @@ import { CS_TOTAL } from '../data/cs';
 import { ProgressBar, SectionTitle } from '../components/ui';
 import type { ReactNode } from 'react';
 
-/** 底部保留的通用成就（口语类、英语专属的徽章不再展示） */
-const KEEP_ACHIEVEMENTS = new Set([
-  'a-first-word',
-  'a-combo-10',
-  'a-perfect-1',
-  'a-perfect-20',
-  'a-streak-3',
-  'a-streak-7',
-  'a-xp-500',
-  'a-xp-2000',
-  'a-vocab-40',
-  'a-quiz-50',
-  'a-quiz-200',
-  'a-quiz-500',
-  'a-correct-100',
-  'a-quiz-streak-3',
-  'a-quiz-streak-7',
-]);
-
 export default function Stats() {
   const nav = useNavigate();
   const stats = useProfileStore((s) => s.stats);
-  const achievements = useProfileStore((s) => s.achievements);
   const resetProfile = useProfileStore((s) => s.resetProfile);
   const aiExplain = useSettingsStore((s) => s.aiExplain);
   const setSetting = useSettingsStore((s) => s.set);
@@ -118,8 +97,6 @@ export default function Stats() {
   /** 模拟次数：数学 + 计算机整卷次数 + 四级练习次数 */
   const mockCount = (subj.totals.math.answered > 0 ? 1 : 0) + cet4.sessions;
 
-  const keptAchievements = ACHIEVEMENTS.filter((a) => KEEP_ACHIEVEMENTS.has(a.id));
-
   return (
     <div className="space-y-5 pt-1">
       {/* 顶部用户等级卡 */}
@@ -151,7 +128,11 @@ export default function Stats() {
         <div className="mt-4 flex gap-2">
           {user ? (
             <button
-              onClick={logout}
+              onClick={() => {
+                // 清空本地登录态后立刻回登录页（全局守卫也会兜底）
+                logout();
+                nav('/login', { replace: true });
+              }}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl bg-white/20 py-2.5 text-xs font-black active:bg-white/30"
             >
               <LogOut size={14} strokeWidth={3} /> 退出登录
@@ -386,39 +367,6 @@ export default function Stats() {
               <ChevronRight size={17} className="shrink-0 text-ink-faint" strokeWidth={2.6} />
             </button>
           )}
-        </div>
-      </section>
-
-      {/* 通用成就 */}
-      <section>
-        <SectionTitle
-          action={
-            <span className="text-xs font-black text-ink-faint">
-              {keptAchievements.filter((a) => achievements.includes(a.id)).length}/
-              {keptAchievements.length}
-            </span>
-          }
-        >
-          成就徽章
-        </SectionTitle>
-        <div className="grid grid-cols-2 gap-3">
-          {keptAchievements.map((a) => {
-            const got = achievements.includes(a.id);
-            return (
-              <div
-                key={a.id}
-                className={clsx('card flex items-center gap-3 p-3', got ? '' : 'opacity-45 grayscale')}
-              >
-                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-ink/5 text-xl">
-                  {a.emoji}
-                </span>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-black text-ink">{a.name}</p>
-                  <p className="truncate text-[11px] text-ink-faint">{a.desc}</p>
-                </div>
-              </div>
-            );
-          })}
         </div>
       </section>
 
