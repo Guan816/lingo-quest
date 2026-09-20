@@ -1,45 +1,23 @@
 import { Flame, Settings, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useProfileStore, useTodayXp } from '../store/useProfileStore';
+import { useProfileStore } from '../store/useProfileStore';
 import { useAuthStore } from '../lib/auth';
-import { levelInfo } from '../lib/gamification';
 
+/**
+ * 全局顶栏（5 个导航页共用）。
+ *
+ * 只保留右侧的功能按钮：连击火焰、排行榜/登录、设置。
+ * 等级卡（LV）、等级称号（如「萌新开口」）与 XP 进度条已按产品要求移除，
+ * 目的是把手机小屏的顶部空间还给内容。
+ */
 export function TopBar() {
   const nav = useNavigate();
   const user = useAuthStore((s) => s.user);
-  const xp = useProfileStore((s) => s.xp);
   const combo = useProfileStore((s) => s.combo);
-  const dailyGoal = useProfileStore((s) => s.dailyGoal);
-  const todayXp = useTodayXp();
-  const info = levelInfo(xp);
-  const dayPct = Math.min(1, todayXp / Math.max(1, dailyGoal));
 
   return (
     <header className="safe-top sticky top-0 z-30 bg-cream/95 px-4 pb-2 backdrop-blur">
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => nav('/stats')}
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-brand-500 text-white shadow-pop-sm btn-pop"
-        >
-          <span className="text-[10px] font-black leading-none">LV</span>
-          <span className="text-sm font-black leading-none">{info.level}</span>
-        </button>
-
-        <div className="min-w-0 flex-1">
-          <div className="mb-1 flex items-center justify-between">
-            <span className="truncate text-xs font-bold text-ink-soft">{info.title}</span>
-            <span className="text-xs font-bold text-ink-faint">
-              今日 {todayXp}/{dailyGoal} XP
-            </span>
-          </div>
-          <div className="h-2.5 w-full overflow-hidden rounded-full bg-ink/10">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-brand-400 to-brand-600 transition-all duration-500"
-              style={{ width: `${dayPct * 100}%` }}
-            />
-          </div>
-        </div>
-
+      <div className="flex items-center justify-end gap-3">
         {combo >= 2 && (
           <div className="flex shrink-0 items-center gap-1 rounded-full bg-sun-100 px-2.5 py-1.5 text-sun-600">
             <Flame size={14} strokeWidth={3} />
