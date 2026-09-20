@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Loader2, Lock, Mail, MessageCircle, Smartphone, UserPlus, X } from 'lucide-react';
 import { useAuthStore } from '../lib/auth';
 import { api } from '../lib/api';
@@ -8,6 +8,7 @@ import { Button } from '../components/ui';
 
 export default function Login() {
   const nav = useNavigate();
+  const location = useLocation();
   const methods = useAuthStore((s) => s.methods);
   const register = useAuthStore((s) => s.register);
   const login = useAuthStore((s) => s.login);
@@ -73,6 +74,12 @@ export default function Login() {
     }
   };
 
+  /**
+   * 登录/注册成功后的收尾。
+   *
+   * 如果用户是被路由守卫从某个页面送过来的，`location.state.from`
+   * 记着他原本想去的地方 —— 登录后直接送回去，而不是一律回首页。
+   */
   const after = async () => {
     setErr('');
     try {
@@ -80,8 +87,14 @@ export default function Login() {
     } catch {
       /* 同步失败不影响登录 */
     }
-    nav('/', { replace: true });
+    const from = (location.state as { from?: string } | null)?.from;
+    nav(from && !from.startsWith('/login') ? from : '/', { replace: true });
   };
+
+  // 已经登录的用户不该停在登录页（首帧之后再判断，避开 persist 水合时序）
+  useEffect(() => {
+    if (useAuthStore.getState().user) nav('/', { replace: true });
+  }, [nav]);
 
   const submitEmail = async () => {
     setErr('');
@@ -316,12 +329,10 @@ export default function Login() {
         </div>
       )}
 
-      <button
-        onClick={() => nav('/')}
-        className="mx-auto mt-6 text-sm font-bold text-ink-faint btn-pop"
-      >
-        先随便逛逛 →
-      </button>
+      {/*
+        这里原先有个「先随便逛逛 →」的免登录入口。
+        现在全局强制登录（未登录进不了任何功能页），这个入口已移除。
+      */}
     </div>
   );
 }
