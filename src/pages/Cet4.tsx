@@ -95,8 +95,9 @@ export default function Cet4() {
             </div>
           </button>
 
+          {/* 英语错题已并入统一错题本 /wrong */}
           <button
-            onClick={() => nav('/cet4/wrong')}
+            onClick={() => nav('/wrong/cet4')}
             className="btn-pop relative overflow-hidden rounded-3xl bg-white text-left shadow-card"
           >
             <div className="grid h-16 place-items-center bg-gradient-to-br from-coral-400 to-coral-600 text-3xl">
