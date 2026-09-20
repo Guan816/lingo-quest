@@ -427,13 +427,150 @@ function buildPrompt(subject: 'math' | 'cs', hasImages: boolean, text: string): 
  * 【导出说明】lib/gen.ts（AI 批量出题）也用它，所以从私有改成导出。
  * 模型偶尔会包一层 markdown 代码块或加前后缀，这里做容错。
  */
+/**
+ * 把模型回复里「LaTeX 反斜杠 / 裸控制字符」修成 JSON 合法转义。
+ *
+ * ── 为什么必须有这一层（踩过的大坑）──
+ * 模型被要求把公式写进 `math` 字段，于是很自然地输出 LaTeX：
+ *     "math": "\frac{(x+1)(x-1)}{x-1}"
+ * 而反斜杠在 JSON 字符串里是转义符：`\l` 直接解析报错，`\f` 会被吃成换页符。
+ * 于是整段回复 JSON.parse 抛错 → 这一批题全部作废。数学科目几乎必踩，
+ * 表现就是「AI 出题一道都出不来」，而纯文本的计算机题却正常 —— 极难定位。
+ *
+ * 修复原则：**只补不合法的转义，不动合法转义**。
+ *   · 保留  \"  \\  \/  \b  \f  \n  \r  \t  \uXXXX
+ *   · 但当 \b\f\n\r\t 后面还紧跟着字母时，判定为 LaTeX 命令
+ *     （\frac \to \times \neq \beta ...），补一个反斜杠
+ *   · 其余非法转义（\l \s \c \p ...）一律补反斜杠
+ *   · 字符串里的裸换行/制表符也一并转义（模型偶尔会直接换行）
+ */
+/**
+ * 常见 LaTeX 命令表 —— 只列**以 b/f/n/r/t 开头**的。
+ *
+ * 为什么要这张表：`\frac` 的前两个字符 `\f` 和 JSON 的换页符一模一样，
+ * `\beta` 的 `\b`、`\theta` 的 `\t`、`\neq` 的 `\n` 同理。
+ * 「反斜杠 + 这 5 个字母」既可能是 JSON 转义，也可能是 LaTeX 命令，
+ * 只能靠**后面那一整段字母是不是一个已知命令名**来区分。
+ *
+ * 其余字母开头（\lim \sqrt \alpha ...）在 JSON 里本来就是非法转义，
+ * 走通用分支自动补反斜杠，不需要登记在这张表里。
+ */
+const LATEX_COMMANDS = new Set([
+  // b
+  'beta', 'bar', 'begin', 'bmatrix', 'binom', 'bmod', 'boldsymbol', 'bullet',
+  'big', 'bigg', 'bigcup', 'bigcap', 'bigoplus', 'bigotimes', 'backslash',
+  'because', 'boxed', 'bot', 'brack', 'brace', 'bigl', 'bigr', 'bf', 'bb', 'Bbb', 'frak',
+  // f
+  'frac', 'forall', 'flat', 'frown', 'fbox', 'floor', 'fpart',
+  // n
+  'neq', 'ne', 'nu', 'nabla', 'not', 'notin', 'nonumber', 'newline', 'nolimits',
+  'nleq', 'ngeq', 'nsim', 'nmid', 'nparallel', 'natural', 'nrightarrow', 'nleftarrow',
+  'nvDash', 'nvdash',
+  // r
+  'rho', 'right', 'rightarrow', 'rangle', 'rfloor', 'rceil', 'rbrace', 'rbrack',
+  'rightleftharpoons', 'rightharpoonup', 'rightharpoondown', 'root', 'rm',
+  // t
+  'to', 'times', 'theta', 'tan', 'tau', 'text', 'textbf', 'textit', 'textrm',
+  'texttt', 'textstyle', 'triangle', 'top', 'tilde', 'tfrac', 'tag', 'therefore',
+  'thickapprox', 'thinspace', 'thicksim', 'tt', 'twoheadrightarrow', 'twoheadleftarrow',
+]);
+
+/** 从 pos 开始取一段连续字母（用于判断是不是 LaTeX 命令名） */
+function letterRunAt(s: string, pos: number): string {
+  let j = pos;
+  while (j < s.length && /[A-Za-z]/.test(s[j])) j += 1;
+  return s.slice(pos, j);
+}
+
+export function repairJsonText(s: string): string {
+  let out = '';
+  let inStr = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+
+    if (!inStr) {
+      out += ch;
+      if (ch === '"') inStr = true;
+      continue;
+    }
+
+    // 字符串内部
+    if (ch === '"') {
+      inStr = false;
+      out += ch;
+      continue;
+    }
+    if (ch === '\\') {
+      const next = s[i + 1];
+      if (next === undefined) {
+        out += '\\\\';
+        continue;
+      }
+      // 合法的单字符转义
+      if (next === '"' || next === '\\' || next === '/') {
+        out += ch + next;
+        i += 1;
+        continue;
+      }
+      // 合法的 \uXXXX
+      if (next === 'u' && /^[0-9a-fA-F]{4}$/.test(s.slice(i + 2, i + 6))) {
+        out += s.slice(i, i + 6);
+        i += 5;
+        continue;
+      }
+      // \n \t \f \b \r：后面的字母段若命中 LaTeX 命令表，说明是 \frac \beta 这类公式
+      if ('bfnrt'.includes(next) && !LATEX_COMMANDS.has(letterRunAt(s, i + 1))) {
+        // 真的是换行 / 制表 / 换页等 JSON 转义 —— 原样保留
+        out += ch + next;
+        i += 1;
+        continue;
+      }
+      // 其余情况（\frac \lim \to \sqrt \alpha \beta ...）都补一个反斜杠
+      out += '\\\\' + next;
+      i += 1;
+      continue;
+    }
+    // 裸控制字符（未转义的换行 / 制表符）→ 转义
+    const code = ch.charCodeAt(0);
+    if (code < 0x20) {
+      out += code === 10 ? '\\n' : code === 13 ? '\\r' : code === 9 ? '\\t' : '\\u' + code.toString(16).padStart(4, '0');
+      continue;
+    }
+    out += ch;
+  }
+  return out;
+}
+
 export function extractJsonObject(text: string): Record<string, unknown> {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const raw = fenced ? fenced[1] : text;
   const start = raw.indexOf('{');
   const end = raw.lastIndexOf('}');
   if (start < 0 || end <= start) throw new Error('模型没有返回可用的解析结果');
-  return JSON.parse(raw.slice(start, end + 1)) as Record<string, unknown>;
+  const slice = raw.slice(start, end + 1);
+
+  /*
+   * 一律先做转义修复，**不能**「先严格解析、失败再修」。
+   *
+   * 因为 `\beta` / `\theta` / `\times` / `\neq` / `\frac` 里的 `\b \t \n \f`
+   * 都是**合法** JSON 转义，严格解析会「成功但解析错」——
+   * 悄悄把公式吃成退格/制表/换行/换页符，而且不报错，最难发现。
+   * 所以必须先按 LaTeX 语义修好转义，再交给 JSON.parse。
+   *
+   * repairJsonText 对「本来就正确转义的 JSON」是幂等的：
+   * 只有 `\` 后面那段字母命中 LaTeX 命令表时才会补反斜杠。
+   */
+  const repaired = repairJsonText(slice);
+  try {
+    return JSON.parse(repaired) as Record<string, unknown>;
+  } catch (e) {
+    // 极少数情况下修复反而破坏了内容：退回原文再试一次，仍失败则抛原错
+    try {
+      return JSON.parse(slice) as Record<string, unknown>;
+    } catch {
+      throw e;
+    }
+  }
 }
 
 const VALID_MODES: QuizItemMode[] = ['single', 'multi', 'judge', 'fill', 'calc', 'proof', 'synthetic'];
