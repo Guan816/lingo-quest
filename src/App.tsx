@@ -24,13 +24,13 @@ import Leaderboard from './pages/Leaderboard';
 import WechatCallback from './pages/WechatCallback';
 import Cet4 from './pages/Cet4';
 import Cet4Play from './pages/Cet4Play';
-import Cet4Wrong from './pages/Cet4Wrong';
 import MathPage from './pages/MathPage';
 import MathPlay from './pages/MathPlay';
 import CsPage from './pages/CsPage';
 import CsPlay from './pages/CsPlay';
 import UploadPaper from './pages/UploadPaper';
 import FormulaBook from './pages/FormulaBook';
+import UploadBook from './pages/UploadBook';
 import WrongBook from './pages/WrongBook';
 import SubjectStats from './pages/SubjectStats';
 import BankGen from './pages/admin/BankGen';
@@ -187,7 +187,8 @@ function Shell() {
             <Route path="/leaderboard" element={<Leaderboard />} />
             <Route path="/cet4" element={<Cet4 />} />
             <Route path="/cet4/play/:kind" element={<Cet4Play />} />
-            <Route path="/cet4/wrong" element={<Cet4Wrong />} />
+            {/* 英语错题已并入统一错题本，老入口保留跳转，避免旧链接失效 */}
+            <Route path="/cet4/wrong" element={<Navigate to="/wrong" replace />} />
             <Route path="/math" element={<MathPage />} />
             <Route path="/math/play/:mode" element={<MathPlay />} />
             <Route path="/math/play/:mode/:value" element={<MathPlay />} />
@@ -199,6 +200,7 @@ function Shell() {
             <Route path="/stats/:subject" element={<SubjectStats />} />
             <Route path="/paper/:subject" element={<UploadPaper />} />
             <Route path="/formulas" element={<FormulaBook />} />
+            <Route path="/upload-book" element={<UploadBook />} />
             <Route path="/admin/bank" element={<BankGen />} />
             <Route path="/admin/bank/list" element={<BankList />} />
             <Route path="*" element={<Navigate to="/" replace />} />
