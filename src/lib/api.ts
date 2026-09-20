@@ -73,33 +73,103 @@ function friendly(e: unknown, path: string): Error {
   return e instanceof Error ? e : new Error(msg);
 }
 
-function getToken(): string | null {
+/* ═══════════════ 登录态：读取 / 刷新 / 失效 ═══════════════ */
+
+/**
+ * 登录态存在 localStorage 的 `maneji-auth`（zustand persist 的结构）。
+ *
+ * 为什么低层这里要直接读写 localStorage，而不是 import auth store：
+ *   · 会形成循环依赖（auth store 依赖 api）；
+ *   · 401 时要在「不经过 store」的情况下也能刷新 / 清空。
+ * 一旦刷到新 token 或判定失效，就用回调同步给 store，避免两边不一致。
+ */
+function readAuth(): { token: string | null; refresh: string | null } {
   try {
     const raw = localStorage.getItem('maneji-auth');
-    if (!raw) return null;
-    const j = JSON.parse(raw);
-    return j?.state?.token ?? null;
+    if (!raw) return { token: null, refresh: null };
+    const s = JSON.parse(raw)?.state ?? {};
+    return { token: s.token ?? null, refresh: s.refresh ?? null };
+  } catch {
+    return { token: null, refresh: null };
+  }
+}
+
+function writeStoredAuth(patch: Record<string, unknown>): void {
+  try {
+    const raw = localStorage.getItem('maneji-auth');
+    const j = raw ? JSON.parse(raw) : { state: {}, version: 0 };
+    j.state = { ...(j.state ?? {}), ...patch };
+    localStorage.setItem('maneji-auth', JSON.stringify(j));
+  } catch {
+    /* localStorage 不可用时忽略 */
+  }
+}
+
+function getToken(): string | null {
+  return readAuth().token;
+}
+
+/** 登录彻底失效（token + refresh 都不可用）时的回调，由 auth store 注册 */
+let expiredHandler: (() => void) | null = null;
+export function setAuthExpiredHandler(fn: (() => void) | null): void {
+  expiredHandler = fn;
+}
+
+/** 静默刷新拿到新 token 时的回调，由 auth store 注册 */
+let refreshedHandler: ((token: string, refresh: string) => void) | null = null;
+export function setAuthRefreshedHandler(
+  fn: ((token: string, refresh: string) => void) | null,
+): void {
+  refreshedHandler = fn;
+}
+
+/**
+ * 用 refresh token 静默换一对新令牌。
+ *
+ * 这里刻意用**原始 fetch**（不是 request()），否则 refresh 自己 401 时
+ * 会再触发一次刷新，形成递归。
+ */
+async function tryRefresh(): Promise<string | null> {
+  const { refresh } = readAuth();
+  if (!refresh) return null;
+  try {
+    const res = await fetch(BASE + '/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh }),
+    });
+    if (!res.ok) return null;
+    const d = await res.json().catch(() => null);
+    if (!d?.token) return null;
+    const nextRefresh = d.refresh ?? refresh;
+    writeStoredAuth({ token: d.token, refresh: nextRefresh });
+    refreshedHandler?.(d.token, nextRefresh);
+    return d.token as string;
   } catch {
     return null;
   }
 }
 
-async function request(path: string, opts: RequestInit = {}): Promise<any> {
-  // 注意：这里**不做**任何前置拦截。先老老实实发请求，
-  // 能不能通由浏览器/WebView 决定，失败了再看 friendly() 怎么解释。
-  const token = getToken();
+/** 带 token 发一次请求（只负责发，不解析、不处理 401） */
+async function rawFetch(
+  path: string,
+  opts: RequestInit,
+  token: string | null,
+): Promise<Response> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(opts.headers as Record<string, string> | undefined),
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-
-  let res: Response;
   try {
-    res = await fetch(BASE + path, { ...opts, headers });
+    return await fetch(BASE + path, { ...opts, headers });
   } catch (e) {
+    // 不做任何前置拦截：先老实发，失败了才用 friendly() 解释
     throw friendly(e, path);
   }
+}
+
+async function parseJson(res: Response): Promise<any> {
   let data: any = {};
   try {
     data = await res.json();
@@ -108,6 +178,47 @@ async function request(path: string, opts: RequestInit = {}): Promise<any> {
   }
   if (!res.ok) throw new Error(data?.error || `请求失败 (${res.status})`);
   return data;
+}
+
+/**
+ * 「登录动作」类接口 —— 它们的 401 表示**凭据不对**（密码错、refresh 失效），
+ * 而不是「访问令牌过期」，所以不能走静默刷新，否则会把「密码错误」
+ * 误报成「登录已过期」。
+ *
+ * 注意 **不包含 `/auth/me`** —— 它是校验令牌的保护接口，
+ * 必须能触发「刷新 / 判定失效」，否则 token 过期时不会被清掉。
+ */
+const AUTH_ACTION_PATHS = [
+  '/auth/login',
+  '/auth/register',
+  '/auth/refresh',
+  '/auth/logout',
+  '/auth/email/send',
+  '/auth/sms/send',
+  '/auth/sms/verify',
+];
+function isAuthAction(path: string): boolean {
+  return AUTH_ACTION_PATHS.some((p) => path === p || path.startsWith(`${p}?`));
+}
+
+async function request(path: string, opts: RequestInit = {}): Promise<any> {
+  const res = await rawFetch(path, opts, getToken());
+
+  /*
+   * 401 = 访问令牌过期。
+   *   · 登录动作类接口除外（见 isAuthAction）。
+   *   · 其余接口：先静默刷新一次并重放；刷新也失败才算登录失效，
+   *     此时清空本地登录态 → 通知 store → 全局路由守卫把用户送回登录页。
+   */
+  if (res.status === 401 && !isAuthAction(path)) {
+    const fresh = await tryRefresh();
+    if (fresh) return parseJson(await rawFetch(path, opts, fresh));
+    writeStoredAuth({ token: null, refresh: null, user: null });
+    expiredHandler?.();
+    throw new Error('登录已过期，请重新登录');
+  }
+
+  return parseJson(res);
 }
 
 export const api = {
