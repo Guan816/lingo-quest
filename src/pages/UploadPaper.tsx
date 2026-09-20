@@ -34,6 +34,8 @@ import { Card, Chip, SectionTitle } from '../components/ui';
 import { PaperQuestionCard } from '../components/PaperQuestionCard';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useFormulaBookStore } from '../store/useFormulaBookStore';
+import { useUploadBookStore } from '../store/useUploadBookStore';
+import { deriveFormulas, DERIVE_MAX_PER_UPLOAD } from '../lib/derive';
 import { checkUploadable, formatSize, prepareFileAccess } from '../lib/permissions';
 import {
   analyzePaper,
@@ -155,9 +157,72 @@ export default function UploadPaper() {
       setExtracted({});
       setStage('review');
       setStep('');
+
+      /*
+       * 解析完成后的两件收尾（异步，不挡住用户看解析）：
+       *   ① 题目进「上传本」—— 用户上传的题要有地方翻
+       *   ② 逐题提炼公式/技巧补进公式本
+       *
+       * 为什么要补这一步：上面那段只吃模型给的**卷级** formulas/tips，
+       * 而它经常是空的（prompt 的重点在逐题解析），于是用户会看到
+       * 「传了卷子但公式本没动静」。逐题提炼才是稳定的来源。
+       */
+      void collectUploaded(result, subject, file.name);
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : '解析失败，请重试');
       setStage('idle');
+      setStep('');
+    }
+  };
+
+  /**
+   * 解析完成后的收尾：题目落「上传本」+ 逐题提炼公式技巧进公式本。
+   * 失败不抛出 —— 解析结果已经给用户看了，收尾失败不该变成整页报错。
+   */
+  const collectUploaded = async (result: PaperAnalysis, subj: Subject, srcName: string) => {
+    const qs = result.questions ?? [];
+    if (!qs.length) return;
+
+    // ① 上传本（同题干自动去重，见 useUploadBookStore）
+    useUploadBookStore.getState().upsertMany(
+      qs.map((q) => ({
+        subject: subj,
+        chapter: q.chapter || chapterFallback,
+        kind: q.mode,
+        mode: q.mode,
+        stem: q.stem,
+        options: q.options,
+        answerText: q.answer ?? '',
+        steps: q.steps,
+        tip: q.tip,
+        pitfall: q.pitfall,
+        no: q.no,
+        sourceName: srcName,
+      })),
+    );
+
+    // ② 逐题提炼公式/技巧（分批合并 + 单次上限，见 lib/derive.ts）
+    try {
+      setStep('正在提炼公式与技巧…');
+      const list = await deriveFormulas(
+        ai,
+        qs.slice(0, DERIVE_MAX_PER_UPLOAD).map((q) => ({
+          subject: subj,
+          chapter: q.chapter || chapterFallback,
+          stem: q.stem,
+          answerText: q.answer,
+          steps: q.steps,
+          tip: q.tip,
+          from: result.title,
+          fromNo: q.no,
+        })),
+        { maxItems: DERIVE_MAX_PER_UPLOAD },
+      );
+      const n = addFormulas(list);
+      if (n > 0) setSavedCount((c) => c + n);
+    } catch {
+      /* 提炼失败不影响解析结果 */
+    } finally {
       setStep('');
     }
   };
@@ -350,7 +415,7 @@ export default function UploadPaper() {
             </span>
             <span className="mt-1 text-sm font-black text-ink">选择文件</span>
             <span className="text-[11px] leading-relaxed text-ink-faint">
-              PDF · 图片（JPG/PNG）· 文本，最大 8MB
+              PDF · 图片（JPG/PNG）· 文本，最大 15MB
             </span>
           </button>
 
@@ -386,7 +451,7 @@ export default function UploadPaper() {
             {/* 把体积限制说清楚，省得用户拿扫描版大文件反复试 */}
             <p className="mt-1.5">
               <b className="text-ink">关于大小：</b>
-              扫描版 PDF 动辄几十兆，上传前会被自动压缩；超过 8MB 的建议只截取要用的那几页。
+              扫描版 PDF 动辄几十兆，上传前会被自动压缩；超过 15MB 的建议只截取要用的那几页。
               拍照上传的单张照片会自动压到 1.6MB 以内，字迹依然认得清。
             </p>
           </div>
