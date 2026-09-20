@@ -25,6 +25,7 @@ import { streakOf } from '../lib/utils';
 import { useProfileStore } from '../store/useProfileStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useFormulaBookStore } from '../store/useFormulaBookStore';
+import { useUploadBookStore } from '../store/useUploadBookStore';
 import { useCet4Store, pendingWrongCount } from '../store/useCet4Store';
 import { useSubjectStore } from '../store/useSubjectStore';
 import { useQuestionBankStore } from '../store/useQuestionBankStore';
@@ -42,6 +43,8 @@ export default function Stats() {
   const aiExplain = useSettingsStore((s) => s.aiExplain);
   const setSetting = useSettingsStore((s) => s.set);
   const formulaTotal = useFormulaBookStore((s) => s.entries.length);
+  /** 上传本里已有的题量（现算，别放模块常量） */
+  const uploadTotal = useUploadBookStore((s) => s.items.length);
   const cet4 = useCet4Store();
   const subj = useSubjectStore();
   const user = useAuthStore((s) => s.user);
@@ -310,6 +313,31 @@ export default function Stats() {
               </span>
               <span className="mt-0.5 block truncate text-[11px] text-ink-faint">
                 自动去重，按考纲顺序排列
+              </span>
+            </span>
+            <ChevronRight size={17} className="shrink-0 text-ink-faint" strokeWidth={2.6} />
+          </button>
+
+          {/* 上传本：紧跟在公式本下方。上传的**题目**放这里，
+              从题目里提炼出的**公式/技巧**进上面的公式本。 */}
+          <button
+            onClick={() => nav('/upload-book')}
+            className="flex w-full items-center gap-2.5 rounded-2xl bg-white px-3.5 py-3 text-left shadow-pop-sm active:bg-ink/3"
+          >
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand-400 to-grape-500 text-white">
+              <Upload size={17} strokeWidth={2.6} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-1.5">
+                <span className="text-[13px] font-black text-ink">上传本</span>
+                {uploadTotal > 0 && (
+                  <span className="rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] font-black text-brand-700">
+                    {uploadTotal}
+                  </span>
+                )}
+              </span>
+              <span className="mt-0.5 block truncate text-[11px] text-ink-faint">
+                你上传的题目，自动提炼公式与技巧
               </span>
             </span>
             <ChevronRight size={17} className="shrink-0 text-ink-faint" strokeWidth={2.6} />
