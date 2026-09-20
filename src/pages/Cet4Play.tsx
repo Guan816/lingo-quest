@@ -250,7 +250,7 @@ function McqPlay({ mode, title }: { mode: PlayMode; title: string }) {
               variant="ghost"
               size="sm"
               icon={<ClipboardList size={15} strokeWidth={3} />}
-              onClick={() => nav('/cet4/wrong')}
+              onClick={() => nav('/wrong/cet4')}
             >
               打开错题本
             </Button>
