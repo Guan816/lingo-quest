@@ -1,5 +1,6 @@
-import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { HashRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { TabBar } from './components/TabBar';
 import { TopBar } from './components/TopBar';
 import { RewardToast } from './components/RewardToast';
@@ -145,42 +146,63 @@ function Shell() {
     window.scrollTo({ top: 0 });
   }, [location.pathname]);
 
+  // App 从后台切回前台时再校验一次登录态（token 可能在后台过期）
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void useAuthStore.getState().revalidate();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
+
   return (
     <div className="mx-auto flex min-h-full max-w-lg flex-col bg-cream">
       {!immersive && <TopBar />}
       <HttpFallbackBanner />
       <main className={immersive ? 'flex-1' : 'flex-1 px-4 pb-4'}>
         <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/map" element={<MapPage />} />
-          <Route path="/play/:levelId" element={<LevelPlay />} />
-          <Route path="/games" element={<GamesHub />} />
-          <Route path="/games/listen" element={<ListenPick />} />
-          <Route path="/games/build" element={<SentenceBuilder />} />
-          <Route path="/games/shadow" element={<Shadowing />} />
-          <Route path="/games/talk" element={<FreeTalk />} />
-          <Route path="/stats" element={<Stats />} />
-          <Route path="/settings" element={<Settings />} />
+          {/* 公开路由：登录页 + 微信回调（回调本身属于登录流程） */}
           <Route path="/login" element={<Login />} />
-          <Route path="/leaderboard" element={<Leaderboard />} />
           <Route path="/auth/wechat/callback" element={<WechatCallback />} />
-          <Route path="/cet4" element={<Cet4 />} />
-          <Route path="/cet4/play/:kind" element={<Cet4Play />} />
-          <Route path="/cet4/wrong" element={<Cet4Wrong />} />
-          <Route path="/math" element={<MathPage />} />
-          <Route path="/math/play/:mode" element={<MathPlay />} />
-          <Route path="/math/play/:mode/:value" element={<MathPlay />} />
-          <Route path="/cs" element={<CsPage />} />
-          <Route path="/cs/play/:mode" element={<CsPlay />} />
-          <Route path="/cs/play/:mode/:value" element={<CsPlay />} />
-          <Route path="/wrong" element={<WrongBook />} />
-          <Route path="/wrong/:mode" element={<WrongBook />} />
-          <Route path="/stats/:subject" element={<SubjectStats />} />
-          <Route path="/paper/:subject" element={<UploadPaper />} />
-          <Route path="/formulas" element={<FormulaBook />} />
-          <Route path="/admin/bank" element={<BankGen />} />
-          <Route path="/admin/bank/list" element={<BankList />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+
+          {/*
+            其余**全部业务页面都要求登录**。
+            没登录 / token 失效 → RequireAuth 送回 /login；
+            首页、数学、计算机、英语、我的，以及刷题、错题本、公式本等
+            任何功能页都在这个组里，未登录一律进不去。
+          */}
+          <Route element={<RequireAuth />}>
+            <Route path="/" element={<Home />} />
+            <Route path="/map" element={<MapPage />} />
+            <Route path="/play/:levelId" element={<LevelPlay />} />
+            <Route path="/games" element={<GamesHub />} />
+            <Route path="/games/listen" element={<ListenPick />} />
+            <Route path="/games/build" element={<SentenceBuilder />} />
+            <Route path="/games/shadow" element={<Shadowing />} />
+            <Route path="/games/talk" element={<FreeTalk />} />
+            <Route path="/stats" element={<Stats />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/leaderboard" element={<Leaderboard />} />
+            <Route path="/cet4" element={<Cet4 />} />
+            <Route path="/cet4/play/:kind" element={<Cet4Play />} />
+            <Route path="/cet4/wrong" element={<Cet4Wrong />} />
+            <Route path="/math" element={<MathPage />} />
+            <Route path="/math/play/:mode" element={<MathPlay />} />
+            <Route path="/math/play/:mode/:value" element={<MathPlay />} />
+            <Route path="/cs" element={<CsPage />} />
+            <Route path="/cs/play/:mode" element={<CsPlay />} />
+            <Route path="/cs/play/:mode/:value" element={<CsPlay />} />
+            <Route path="/wrong" element={<WrongBook />} />
+            <Route path="/wrong/:mode" element={<WrongBook />} />
+            <Route path="/stats/:subject" element={<SubjectStats />} />
+            <Route path="/paper/:subject" element={<UploadPaper />} />
+            <Route path="/formulas" element={<FormulaBook />} />
+            <Route path="/admin/bank" element={<BankGen />} />
+            <Route path="/admin/bank/list" element={<BankList />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
         </Routes>
       </main>
       {!immersive && <TabBar />}
@@ -189,6 +211,51 @@ function Shell() {
       <PermissionGate />
     </div>
   );
+}
+
+/** 正在确认登录态时的占位（不能直接跳登录页，否则刷新瞬间会误跳） */
+function Splash() {
+  return (
+    <div className="grid min-h-[60vh] place-items-center">
+      <div className="flex flex-col items-center gap-3 text-ink-faint">
+        <Loader2 size={26} className="animate-spin" />
+        <span className="text-xs font-bold">正在确认登录状态…</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 登录守卫：包住「所有需要登录的业务页面」。
+ *
+ * 判定顺序很重要：
+ *   ① `ready` 还没好 → 先显示占位，**不能**立刻跳登录页
+ *      （zustand persist 的水合发生在首帧之后，否则每次刷新都会闪一下登录页）
+ *   ② 已就绪但没 user → 记下想去的位置，replace 到 /login
+ *   ③ 通过 → 渲染 <Outlet />（真正的页面）
+ */
+function RequireAuth() {
+  const location = useLocation();
+  const ready = useAuthStore((s) => s.ready);
+  const user = useAuthStore((s) => s.user);
+
+  // 每次进入受保护页面都重新校验一次 token 是否还有效
+  // （store 内部有 20 秒节流，不会每次切页都打接口）
+  useEffect(() => {
+    if (ready) void useAuthStore.getState().revalidate();
+  }, [ready, location.pathname]);
+
+  if (!ready) return <Splash />;
+  if (!user) {
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{ from: location.pathname + location.search + location.hash }}
+      />
+    );
+  }
+  return <Outlet />;
 }
 
 export default function App() {
